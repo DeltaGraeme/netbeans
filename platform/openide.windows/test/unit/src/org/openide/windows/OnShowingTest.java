@@ -20,6 +20,7 @@ package org.openide.windows;
 
 import java.awt.Frame;
 import java.awt.Image;
+import java.awt.Window;
 import java.beans.PropertyChangeListener;
 import java.util.Set;
 import javax.swing.Action;
@@ -188,6 +189,26 @@ public class OnShowingTest extends NbTestCase{
                 @Override
                 public TopComponent findTopComponent(String tcID) {
                     throw new UnsupportedOperationException("Not supported yet.");
+                }
+
+                @Override
+                public Set<NbWindow> getNbWindows() {
+                    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+                }
+
+                @Override
+                public NbWindow findNbWindow(String name) {
+                    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+                }
+
+                @Override
+                public boolean isNbWindow(Window window) {
+                    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
+                }
+
+                @Override
+                public boolean isEditor(TopComponent topComponent) {
+                    throw new UnsupportedOperationException("Not supported yet."); //To change body of generated methods, choose Tools | Templates.
                 }
             }
         );

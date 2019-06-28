@@ -92,6 +92,38 @@ public abstract class WindowManager extends Object implements Serializable {
 
         return dummyInstance;
     }
+    
+    /**
+     * Get all NbWindows
+     * 
+     * @return Set of NbWindows
+     * @since 4.13-gwi
+     */
+    public abstract Set<NbWindow> getNbWindows(); 
+
+    /**
+     * Find NbWindow of specified name
+     * 
+     * @return NbWindow or null
+     * @since 4.13-gwi
+     */
+    public abstract NbWindow findNbWindow(String name);
+
+    /**
+     * Determines if the Window is an NbWindow
+     * 
+     * @return true if window is an NbWindow
+     * @since 4.13-gwi
+     */
+    public abstract boolean isNbWindow(Window window); 
+
+    /**
+     * Determines if the TopComponent is an Editor (using EditorSelectors)
+     * 
+     * @return true if TopComponent is an editor
+     * @since 4.13-gwi
+     */
+    public abstract boolean isEditor(TopComponent topComponent);
 
     /** Finds mode of specified name.
      * @return <code>Mode</code> whith the specified name is or <code>null</code>
@@ -850,6 +882,6 @@ public abstract class WindowManager extends Object implements Serializable {
          * Gets a list of workspaces where this component is currently open.
          * @return the set of workspaces where the managed component is open
          */
-        public Set<Workspace> whereOpened();
-    }
+        public Set<Workspace> whereOpened();                
+    }    
 }
