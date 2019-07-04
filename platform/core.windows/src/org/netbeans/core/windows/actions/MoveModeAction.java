@@ -30,6 +30,7 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 import org.netbeans.core.windows.Constants;
 import org.netbeans.core.windows.ModeImpl;
+import org.netbeans.core.windows.NbWindowImpl;
 import org.netbeans.core.windows.WindowManagerImpl;
 import org.netbeans.core.windows.view.dnd.TopComponentDraggable;
 
@@ -87,11 +88,12 @@ implements PropertyChangeListener {
     
     private void updateEnabled() {
         ModeImpl contextMode = getModeToWorkWith();
+		// gwi? use window?
         if( null == contextMode 
 //                || contextMode.getKind() == Constants.MODE_KIND_EDITOR 
                 || contextMode.getState() == Constants.MODE_STATE_SEPARATED
                 || null == contextMode.getSelectedTopComponent()
-                || WindowManagerImpl.getInstance().getCurrentMaximizedMode() != null ) {
+                || WindowManagerImpl.getInstance().getCurrentMaximizedMode(null) != null ) {
             setEnabled( false );
             return;
         }

@@ -36,7 +36,10 @@ import javax.swing.JLayeredPane;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import javax.swing.UIManager;
+import org.netbeans.core.windows.NbWindowImpl;
 import org.netbeans.core.windows.Constants;
+import org.netbeans.core.windows.ModeImpl;
+import org.netbeans.core.windows.WindowManagerImpl;
 import org.netbeans.core.windows.view.SlidingView;
 import org.netbeans.core.windows.view.ViewElement;
 import org.netbeans.core.windows.view.ui.slides.SlideOperation;
@@ -64,16 +67,19 @@ public final class DesktopImpl {
     private Component viewComponent;
     
     /** slide bars. Lazy initialization, because slide bars are optional. */
-    private Set<SlidingView> slidingViews;
+    private Set<SlidingView> slidingViews = getSlidingViews(); 
     /** slide in operation in progress or null if no component is currently slided in */
     private SlideOperation curSlideIn;
+
+    private boolean isMainWindowDesktop = false;
 
     /** Minimal thick of slided component when system is trying to align
      * slided component with editor area */
     private static final int MIN_EDITOR_ALIGN_THICK = 80;
     
     /** Creates a new instance of DesktopImpl */
-    public DesktopImpl () {
+    public DesktopImpl (boolean isMainWindowDesktop) {
+        this.isMainWindowDesktop = isMainWindowDesktop;
         // layered pane with absolute positioning, to enable overlapping
         layeredPane = new JLayeredPane();
         layeredPane.setLayout(new LayeredLayout());
@@ -166,8 +172,9 @@ public final class DesktopImpl {
             constr.weighty = 1;
             constr.anchor = GridBagConstraints.CENTER;
             Insets insets = UIManager.getInsets("nb.desktop.view.insets"); //NOI18N
-            if( null != insets )
+            if( null != insets ) {
                 constr.insets = insets;
+            }
             desktop.add(component, constr);
         }
         layeredPane.revalidate();
@@ -191,7 +198,6 @@ public final class DesktopImpl {
             constraint.gridy = 2;
             constraint.gridwidth = 3;
             constraint.anchor = GridBagConstraints.SOUTHWEST;
-            
         } else if (Constants.LEFT.equals(view.getSide())) {
             constraint.gridx = 0;
             constraint.gridy = 1;
@@ -209,10 +215,16 @@ public final class DesktopImpl {
             constraint.gridwidth = 2;
             constraint.anchor = GridBagConstraints.NORTHWEST;
         }
-        desktop.add(view.getComponent(), constraint);
-        if( Constants.BOTTOM.equals( view.getSide()) && view.getComponent() instanceof JPanel ) {
-            JPanel panel = ( JPanel ) view.getComponent();
-            MainWindow.getInstance().setStatusBarContainer( panel );
+        Container d = (Container)desktop;
+        if(d.isAncestorOf(view.getComponent()))
+            System.out.println("DESKTOP already contains at " + constraint);
+        else
+            desktop.add(view.getComponent(), constraint);
+        if(isMainWindowDesktop) {
+            if( Constants.BOTTOM.equals( view.getSide()) && view.getComponent() instanceof JPanel ) {
+                JPanel panel = ( JPanel ) view.getComponent();
+                MainWindow.getInstance().setStatusBarContainer( panel );
+            }
         }
         // #45033 fix - invalidate isn't enough, revalidate is correct
         layeredPane.revalidate();
@@ -288,7 +300,9 @@ public final class DesktopImpl {
     public void performSlideToggleMaximize( TopComponent tc, String side, Rectangle editorBounds ) {
         Component tabbed = findTabbed( tc );
         if( null != tabbed ) {
-            SlideOperation operation = SlideOperationFactory.createSlideResize( tabbed, side );
+            ModeImpl mode = (ModeImpl)WindowManagerImpl.getInstance().findMode(tc);
+            NbWindowImpl window = WindowManagerImpl.getInstance().getWindowForMode(mode);
+            SlideOperation operation = SlideOperationFactory.createSlideResize( window, tabbed, side );
             Rectangle slideInBounds = computeSlideInBounds(operation, editorBounds);
             operation.setFinishBounds(slideInBounds);
             performSlide(operation);

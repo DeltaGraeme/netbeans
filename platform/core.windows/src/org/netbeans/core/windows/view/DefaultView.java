@@ -28,8 +28,10 @@ import java.awt.*;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Set;
 import javax.swing.SwingUtilities;
+import org.netbeans.core.windows.NbWindowImpl;
 
 import org.openide.awt.ToolbarPool; // Why is this in open API?
 import org.openide.util.WeakSet;
@@ -42,7 +44,10 @@ import org.netbeans.core.windows.view.dnd.WindowDnDManager;
 import org.netbeans.core.windows.WindowManagerImpl;
 import org.netbeans.core.windows.WindowSystemSnapshot;
 import org.netbeans.core.windows.view.dnd.TopComponentDraggable;
+import org.netbeans.core.windows.view.dnd.ZOrderManager;
+import org.netbeans.core.windows.view.ui.NbWindowFrame;
 import org.netbeans.core.windows.view.ui.slides.SlideOperation;
+import org.netbeans.core.windows.view.ui.NbWindowComponent;
 
 /**
  * Class which handles view requests, i.e. updates GUI accordingly (ViewHierarchy)
@@ -79,13 +84,21 @@ class DefaultView implements View, Controller, WindowDnDManager.ViewAccessor {
         return hierarchy.getMainWindow().getFrame();
     }
     
+    @Override 
+    public NbWindowComponent getNbWindowComponent(NbWindowImpl window) {
+        return hierarchy.getNbWindowFrame(window.getName());
+    }
+
     @Override
-    public Component getEditorAreaComponent() {
-        return hierarchy.getEditorAreaComponent();
+    public Component getEditorAreaComponent(NbWindowImpl window) {
+        return hierarchy.getEditorAreaComponent(window);
     }
     
     @Override
     public String guessSlideSide (TopComponent comp) {
+        ModeImpl mode = (ModeImpl)WindowManagerImpl.getInstance().findMode(comp);
+        NbWindowImpl window = WindowManagerImpl.getInstance().getWindowForMode(mode);
+
         String toReturn = Constants.LEFT;
         if (hierarchy.getMaximizedModeView() != null) {
 			//issue #58562
@@ -95,7 +108,7 @@ class DefaultView implements View, Controller, WindowDnDManager.ViewAccessor {
                 toReturn = Constants.LEFT;
             }
         } else {
-            Rectangle editorb = hierarchy.getPureEditorAreaBounds();
+            Rectangle editorb = hierarchy.getPureEditorAreaBounds(window);
             Point leftTop = new Point(0, 0);
             SwingUtilities.convertPointToScreen(leftTop, comp);
             if (editorb.x > leftTop.x) {
@@ -251,9 +264,12 @@ class DefaultView implements View, Controller, WindowDnDManager.ViewAccessor {
                 if(DEBUG) {
                     debugLog("Maximized mode changed"); // NOI18N
                 }
-
-                hierarchy.setMaximizedModeView(hierarchy.getModeViewForAccessor(wsa.getMaximizedModeAccessor()));
-                hierarchy.updateDesktop(wsa);
+                Map<NbWindowAccessor, ModeAccessor> map = wsa.getMaximizedModeAccessor();
+                for(NbWindowAccessor awa: map.keySet()) {
+                    // for each window
+                    hierarchy.setMaximizedModeView(hierarchy.getModeViewForAccessor(map.get(awa)));
+                    hierarchy.updateDesktopTest(map.get(awa), wsa); // gwi? // name-should-not-be-test
+                }
                 hierarchy.activateMode(wsa.getActiveModeAccessor());
             } else if(changeType == CHANGE_MODE_ADDED) {
                 if(DEBUG) {
@@ -323,9 +339,12 @@ class DefaultView implements View, Controller, WindowDnDManager.ViewAccessor {
                 if(DEBUG) {
                     debugLog("TopComponent removed"); // NOI18N
                 }
-
-                hierarchy.setMaximizedModeView(hierarchy.getModeViewForAccessor(wsa.getMaximizedModeAccessor()));
-                hierarchy.updateDesktop(wsa);
+                Map<NbWindowAccessor, ModeAccessor> map = wsa.getMaximizedModeAccessor();
+                for(NbWindowAccessor awa: map.keySet()) {
+                    // for each window
+                    hierarchy.setMaximizedModeView(hierarchy.getModeViewForAccessor(map.get(awa)));
+                    hierarchy.updateDesktopTest(map.get(awa), wsa); // gwi?
+                }
                 ModeView modeView = hierarchy.getModeViewForAccessor(wsa.findModeAccessor((String)viewEvent.getSource())); // XXX
                 if(modeView != null) {
                     modeView.removeTopComponent((TopComponent)viewEvent.getNewValue());
@@ -406,9 +425,12 @@ class DefaultView implements View, Controller, WindowDnDManager.ViewAccessor {
                 if(DEBUG) {
                     debugLog("DnD performed"); // NOI18N
                 }
-
-                hierarchy.setMaximizedModeView(hierarchy.getModeViewForAccessor(wsa.getMaximizedModeAccessor()));
-                hierarchy.updateDesktop();
+                Map<NbWindowAccessor, ModeAccessor> map = wsa.getMaximizedModeAccessor();
+                for(NbWindowAccessor awa: map.keySet()) {
+                    // for each window
+                    hierarchy.setMaximizedModeView(hierarchy.getModeViewForAccessor(map.get(awa)));
+                    hierarchy.updateDesktopTest(map.get(awa), wsa);
+                }
                 hierarchy.activateMode(wsa.getActiveModeAccessor());
             } else if(changeType == CHANGE_UI_UPDATE) {
                 if(DEBUG) {
@@ -421,8 +443,11 @@ class DefaultView implements View, Controller, WindowDnDManager.ViewAccessor {
                 if(DEBUG) {
                     debugLog("Top Component Auto Hide changed"); // NOI18N
                 }
-                hierarchy.setMaximizedModeView(hierarchy.getModeViewForAccessor(wsa.getMaximizedModeAccessor()));
-                hierarchy.updateDesktop(wsa);
+                Map<NbWindowAccessor, ModeAccessor> map = wsa.getMaximizedModeAccessor();
+                for(NbWindowAccessor awa: map.keySet()) {
+                    hierarchy.setMaximizedModeView(hierarchy.getModeViewForAccessor(map.get(awa)));
+                    hierarchy.updateDesktopTest(map.get(awa), wsa);
+                }
                 hierarchy.activateMode(wsa.getActiveModeAccessor());
             } else if (changeType == View.TOPCOMPONENT_REQUEST_ATTENTION) {
                 if (DEBUG) {
@@ -501,6 +526,30 @@ class DefaultView implements View, Controller, WindowDnDManager.ViewAccessor {
                 TopComponent tc = (TopComponent)viewEvent.getSource();
                 String side = (String)viewEvent.getNewValue();
                 hierarchy.performSlideToggleMaximize( tc, side );
+            } else if (changeType == View.CHANGE_NBWINDOW_ADDED) {
+                if(DEBUG) {
+                    debugLog("NbWindow added"); //NOI18N
+                }
+//                hierarchy.updateAuxWindows(wsa.getAuxWindowStructureAccessor());
+//                System.out.println("ACTIVE_MODE=" + wsa.getActiveModeAccessor());
+//                hierarchy.activateMode(wsa.getActiveModeAccessor());
+            } else if (changeType == View.CHANGE_NBWINDOW_REMOVED) {
+                if(DEBUG) {
+                    debugLog("NbWindow removed"); //NOI18N
+                }
+                NbWindowImpl window = (NbWindowImpl)viewEvent.getNewValue();
+                hierarchy.removeNbWindowImpl(window);
+//                hierarchy.updateAuxWindows(wsa.getAuxWindowStructureAccessor());
+//                System.out.println("ACTIVE_MODE=" + wsa.getActiveModeAccessor());
+//                hierarchy.activateMode(wsa.getActiveModeAccessor());
+            } else if (changeType == View.CHANGE_NBWINDOW_BOUNDS_CHANGED) {
+                if(DEBUG) {
+                    debugLog("NbWindow bounds changed"); //NOI18N
+                }
+                NbWindowImpl window = (NbWindowImpl)viewEvent.getSource();
+                Rectangle bounds = (Rectangle)viewEvent.getNewValue();
+                NbWindowComponent frame = hierarchy.getNbWindowFrame(window);
+                frame.setBounds(bounds);
             }
         }
         
@@ -569,9 +618,12 @@ class DefaultView implements View, Controller, WindowDnDManager.ViewAccessor {
         }
 
         // Shows main window
-        hierarchy.getMainWindow().setVisible(true);
-        
-        hierarchy.setMaximizedModeView(hierarchy.getModeViewForAccessor(wsa.getMaximizedModeAccessor()));
+        hierarchy.openZOrderWindows();
+        Map<NbWindowAccessor, ModeAccessor> map = wsa.getMaximizedModeAccessor();
+        for(NbWindowAccessor awa: map.keySet()) {
+            // for each window
+            hierarchy.setMaximizedModeView(hierarchy.getModeViewForAccessor(map.get(awa)));
+        }        
 
         // Init desktop.
         hierarchy.updateDesktop(wsa);
@@ -622,10 +674,14 @@ class DefaultView implements View, Controller, WindowDnDManager.ViewAccessor {
     }
     
     private void hideWindowSystem() {
+        ZOrderManager.getInstance().captureZOrder();
+
         hierarchy.uninstallMainWindowListeners();
         
         hierarchy.setSeparateModesVisible(false);
         hierarchy.getMainWindow().setVisible(false);
+        // hide all nbwindows!
+        hierarchy.hideNbWindows();
         // Release all.
         hierarchy.releaseAll();
     }
@@ -701,7 +757,7 @@ class DefaultView implements View, Controller, WindowDnDManager.ViewAccessor {
             // XXX PENDING
             updateMainWindowBoundsSeparatedHelp();
             updateEditorAreaBoundsHelp();
-            updateSeparateBoundsForView(hierarchy.getSplitRootElement());
+            updateSeparateBoundsForView(hierarchy.getSplitRootElement(null));
         }
     }
     
@@ -741,7 +797,7 @@ class DefaultView implements View, Controller, WindowDnDManager.ViewAccessor {
     }
     
     @Override
-    public void userMovedSplit(SplitView splitView, ViewElement[] childrenViews, double[] splitWeights) {
+    public void userMovedSplit(NbWindowImpl window, SplitView splitView, ViewElement[] childrenViews, double[] splitWeights) {
         if(DEBUG) {
             debugLog("User moved split"); // NOI18N
 //            Debug.dumpStack(DefaultView.class);
@@ -754,7 +810,7 @@ class DefaultView implements View, Controller, WindowDnDManager.ViewAccessor {
             for( int i=0; i<childrenViews.length; i++ ) {
                 childrenAccessors[i] = hierarchy.getAccessorForView( childrenViews[i] );
             }
-            ViewHelper.setSplitWeights(splitAccessor, childrenAccessors, splitWeights, controllerHandler);
+            ViewHelper.setSplitWeights(window, splitAccessor, childrenAccessors, splitWeights, controllerHandler);
         }
         // XXX PENDING
 //        updateSeparateBoundsForView(splitView);
@@ -801,18 +857,18 @@ class DefaultView implements View, Controller, WindowDnDManager.ViewAccessor {
     
     // DnD
     @Override
-    public void userDroppedTopComponents(ModeView modeView, TopComponentDraggable draggable) {
+    public void userDroppedTopComponents(NbWindowImpl window, ModeView modeView, TopComponentDraggable draggable) {
         if(DEBUG) {
             debugLog("User dropped TopComponent's"); // NOI18N
         }
 
         ModeAccessor modeAccessor = (ModeAccessor)hierarchy.getAccessorForView(modeView);
         ModeImpl mode = getModeForModeAccessor(modeAccessor);
-        controllerHandler.userDroppedTopComponents(mode, draggable);
+        controllerHandler.userDroppedTopComponents(window, mode, draggable);
     }
     
     @Override
-    public void userDroppedTopComponents(ModeView modeView, TopComponentDraggable draggable, int index) {
+    public void userDroppedTopComponents(NbWindowImpl window, ModeView modeView, TopComponentDraggable draggable, int index) {
         if(DEBUG) {
             debugLog("User dropped TopComponent's to index=" + index); // NOI18N
         }
@@ -828,45 +884,45 @@ class DefaultView implements View, Controller, WindowDnDManager.ViewAccessor {
             }
         }
                 
-        controllerHandler.userDroppedTopComponents(mode, draggable, index);
+        controllerHandler.userDroppedTopComponents(window, mode, draggable, index);
     }
     
     @Override
-    public void userDroppedTopComponents(ModeView modeView, TopComponentDraggable draggable, String side) {
+    public void userDroppedTopComponents(NbWindowImpl window, ModeView modeView, TopComponentDraggable draggable, String side) {
         if(DEBUG) {
             debugLog("User dropped TopComponent's to side=" + side); // NOI18N
         }
         
         ModeAccessor modeAccessor = (ModeAccessor)hierarchy.getAccessorForView(modeView);
         ModeImpl mode = getModeForModeAccessor(modeAccessor);
-        controllerHandler.userDroppedTopComponents(mode, draggable, side);
+        controllerHandler.userDroppedTopComponents(window, mode, draggable, side);
     }
 
     @Override
-    public void userDroppedTopComponentsIntoEmptyEditor(TopComponentDraggable draggable) {
+    public void userDroppedTopComponentsIntoEmptyEditor(NbWindowImpl window, TopComponentDraggable draggable) {
         if(DEBUG) {
             debugLog("User dropped TopComponent's into empty editor"); // NOI18N
         }
         
-        controllerHandler.userDroppedTopComponentsIntoEmptyEditor(draggable);
+        controllerHandler.userDroppedTopComponentsIntoEmptyEditor(window, draggable);
     }
     
     @Override
-    public void userDroppedTopComponentsAround(TopComponentDraggable draggable, String side) {
+    public void userDroppedTopComponentsAround(NbWindowImpl window, TopComponentDraggable draggable, String side) {
         if(DEBUG) {
             debugLog("User dropped TopComponent's around, side=" + side); // NOI18N
         }
         
-        controllerHandler.userDroppedTopComponentsAround(draggable, side);
+        controllerHandler.userDroppedTopComponentsAround(window, draggable, side);
     }
     
     @Override
-    public void userDroppedTopComponentsAroundEditor(TopComponentDraggable draggable, String side) {
+    public void userDroppedTopComponentsAroundEditor(NbWindowImpl window, TopComponentDraggable draggable, String side) {
         if(DEBUG) {
             debugLog("User dropped TopComponent's around editor, side=" + side); // NOI18N
         }
         
-        controllerHandler.userDroppedTopComponentsAroundEditor(draggable, side);
+        controllerHandler.userDroppedTopComponentsAroundEditor(window, draggable, side);
     }
     
     @Override
@@ -953,7 +1009,7 @@ class DefaultView implements View, Controller, WindowDnDManager.ViewAccessor {
     
     // XXX
     private void updateEditorAreaBoundsHelp() {
-        Rectangle bounds = hierarchy.getPureEditorAreaBounds();
+        Rectangle bounds = hierarchy.getPureEditorAreaBounds(null);
         controllerHandler.userResizedEditorAreaBoundsHelp(bounds);
     }
     
@@ -1017,8 +1073,8 @@ class DefaultView implements View, Controller, WindowDnDManager.ViewAccessor {
     }
     
     @Override
-    public Component getSlidingModeComponent(String side) {
-        return hierarchy.getSlidingModeComponent(side);
+    public Component getSlidingModeComponent(NbWindowImpl window, String side) {
+        return hierarchy.getSlidingModeComponent(window, side);
     }
     // ViewAccessor
     ///////////////
@@ -1032,6 +1088,66 @@ class DefaultView implements View, Controller, WindowDnDManager.ViewAccessor {
     public void userStartedKeyboardDragAndDrop( TopComponentDraggable draggable ) {
         hierarchy.userStartedKeyboardDragAndDrop( draggable );
     }
+
+    // gwi
+
+    @Override
+    public void userEmptiedNbWindow(NbWindowImpl window) {
+        controllerHandler.destroyNbWindow(window);
+    }
     
+    
+    
+    public void userClosingNbWindow(NbWindowImpl window) {
+        controllerHandler.userClosedNbWindow(window);
+        hierarchy.removeNbWindowImpl(window);
+    }
+    
+    @Override
+    public void userMovedNbWindow(NbWindowImpl window, Rectangle bounds) {
+        if(window == null)
+            return; // ignore main-window
+
+        if(DEBUG) {
+            debugLog("User moved nbwindow");
+        }
+                
+        // Ignore when window is maximixed
+        NbWindowComponent comp = hierarchy.getNbWindowFrame(window);
+        if(comp instanceof NbWindowFrame) {
+            NbWindowFrame frame = (NbWindowFrame)comp;
+            if(frame.getExtendedState() == Frame.MAXIMIZED_BOTH) {
+                return;
+            }
+        } 
+        controllerHandler.userResizedNbWindow(window, bounds); // not a typo userResizedNbWindow
+    }
+
+    @Override
+    public void userResizedNbWindow(NbWindowImpl window, Rectangle bounds) {
+        if(window == null)
+            return; // ignore main-window
+
+        if(DEBUG) {
+            debugLog("User resized nbwindow");
+        }
+        
+        NbWindowComponent comp = hierarchy.getNbWindowFrame(window);
+        if(comp != null) {
+            // Ignore when main window is maximized?
+            if(comp instanceof NbWindowFrame) {
+                NbWindowFrame frame = (NbWindowFrame)comp;
+                if(frame.getExtendedState() == Frame.MAXIMIZED_BOTH) {
+                    return;
+                }
+            } 
+            controllerHandler.userResizedNbWindow(window, bounds); // not a typo userResizedNbWindow
+        }
+    }
+    
+    @Override
+    public Set<Component> getNbWindowFrames() {
+        return hierarchy.getNbWindowFrames();
+    }
 }
 

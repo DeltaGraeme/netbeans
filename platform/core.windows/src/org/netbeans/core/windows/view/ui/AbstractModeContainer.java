@@ -20,7 +20,6 @@
 
 package org.netbeans.core.windows.view.ui;
 
-
 import org.netbeans.swing.tabcontrol.customtabs.Tabbed;
 import org.netbeans.core.windows.Constants;
 import org.netbeans.core.windows.WindowManagerImpl;
@@ -34,27 +33,28 @@ import javax.swing.*;
 import java.awt.*;
 import java.util.Arrays;
 import org.netbeans.core.windows.view.dnd.TopComponentDraggable;
+import org.openide.windows.Mode;
 
 
-/** 
+/**
  * Abstract helper implementation of <code>ModeContainer</code>.
  * PENDING: It provides also support for TopComponentDroppable.
  *
  * @author  Peter Zavadsky
  */
 public abstract class AbstractModeContainer implements ModeContainer {
-    
+
     /** Associated mode view. */
     protected final ModeView modeView;
 
     protected final TabbedHandler tabbedHandler;
-    
+
     // PENDING
     protected final WindowDnDManager windowDnDManager;
-    
+
     // kind of mode, editor or view
     private final int kind;
-    
+
 
     public AbstractModeContainer(ModeView modeView, WindowDnDManager windowDnDManager, int kind) {
         this.modeView = modeView;
@@ -67,14 +67,14 @@ public abstract class AbstractModeContainer implements ModeContainer {
     public ModeView getModeView() {
         return modeView;
     }
-    
+
     /** */
     public Component getComponent() {
         return getModeComponent();
     }
-    
+
     protected abstract Component getModeComponent();
-    
+
     protected abstract Tabbed createTabbed();
 
     public void addTopComponent(TopComponent tc) {
@@ -88,13 +88,13 @@ public abstract class AbstractModeContainer implements ModeContainer {
         updateTitle(selected == null
             ? "" : WindowManagerImpl.getInstance().getTopComponentDisplayName(selected)); // NOI18N
     }
-    
+
     public void setSelectedTopComponent(TopComponent tc) {
         tabbedHandler.setSelectedTopComponent(tc);
-        
+
         updateTitle(WindowManagerImpl.getInstance().getTopComponentDisplayName(tc));
     }
-    
+
     public void setTopComponents(TopComponent[] tcs, TopComponent selected) {
         //Cheaper to do the equality test here than later
         if (!Arrays.equals(tcs, getTopComponents())) {
@@ -106,26 +106,26 @@ public abstract class AbstractModeContainer implements ModeContainer {
             setSelectedTopComponent(selected);
         }
     }
-    
+
     protected abstract void updateTitle(String title);
-    
+
     protected abstract void updateActive(boolean active);
-    
-    
+
+
     public TopComponent getSelectedTopComponent() {
         return tabbedHandler.getSelectedTopComponent();
     }
-    
+
     public void setActive(boolean active) {
         updateActive(active);
 
         TopComponent selected = tabbedHandler.getSelectedTopComponent();
         updateTitle(selected == null
             ? "" : WindowManagerImpl.getInstance().getTopComponentDisplayName(selected)); // NOI18N
-        
+
         tabbedHandler.setActive(active);
     }
-    
+
     @Override
     public void focusSelectedTopComponent() {
         // PENDING focus gets main window sometimes, investgate and refine (jdk1.4.1?).
@@ -149,8 +149,26 @@ public abstract class AbstractModeContainer implements ModeContainer {
                 selectedTopComponent.requestFocus();
             }
         }
+        // Check to see if focus did transfer to selected top component - or clear focus owner!
+        SwingUtilities.invokeLater(new Runnable() {
+            @Override
+            public void run() {
+                Component focusedComponent = FocusManager.getCurrentManager().getFocusOwner();
+                if(focusedComponent != null) {
+                    // The selected top-component could have changed (if we are switching tabs, so we get selected top component)
+                    Mode activeMode = WindowManagerImpl.getInstance().getActiveMode();
+                    if(!SwingUtilities.isDescendingFrom(focusedComponent, WindowManagerImpl.getInstance().getSelectedTopComponent(activeMode))) {
+                        // try again?
+                        selectedTopComponent.requestFocusInWindow();
+                        if(!SwingUtilities.isDescendingFrom(focusedComponent, WindowManagerImpl.getInstance().getSelectedTopComponent(activeMode))) {
+                            FocusManager.getCurrentManager().clearFocusOwner();
+                        }
+                    }
+                }
+            }
+        });
     }
-    
+
     public TopComponent[] getTopComponents() {
         return tabbedHandler.getTopComponents();
     }
@@ -158,17 +176,17 @@ public abstract class AbstractModeContainer implements ModeContainer {
     public void updateName(TopComponent tc) {
         TopComponent selected = getSelectedTopComponent();
         if(tc == selected) {
-            updateTitle(tc == null 
+            updateTitle(tc == null
                 ? "" : WindowManagerImpl.getInstance().getTopComponentDisplayName(tc)); // NOI18N
         }
-        
+
         tabbedHandler.topComponentNameChanged(tc, kind);
     }
-    
+
     public void updateToolTip(TopComponent tc) {
         tabbedHandler.topComponentToolTipChanged(tc);
     }
-    
+
     public void updateIcon(TopComponent tc) {
         tabbedHandler.topComponentIconChanged(tc);
     }
@@ -177,7 +195,7 @@ public abstract class AbstractModeContainer implements ModeContainer {
     protected int getKind() {
         return kind;
     }
-    
+
     ////////////////////////
     // Support for TopComponentDroppable
     protected Shape getIndicationForLocation(Point location) {
@@ -186,28 +204,28 @@ public abstract class AbstractModeContainer implements ModeContainer {
             windowDnDManager.getStartingPoint(),
             isAttachingPossible());
     }
-    
+
     protected Object getConstraintForLocation(Point location) {
         return tabbedHandler.getConstraintForLocation(location, isAttachingPossible());
     }
-    
+
     protected abstract boolean isAttachingPossible();
-    
+
     protected ModeView getDropModeView() {
         return modeView;
     }
-    
+
     protected Component getDropComponent() {
         return tabbedHandler.getComponent();
     }
-    
+
     protected abstract TopComponentDroppable getModeDroppable();
-    
+
     protected boolean canDrop(TopComponentDraggable transfer) {
         if(transfer.isAllowedToMoveAnywhere()) {
             return true;
         }
-        
+
         boolean isNonEditor = transfer.getKind() == Constants.MODE_KIND_VIEW || transfer.getKind() == Constants.MODE_KIND_SLIDING;
         boolean thisIsNonEditor = this.kind == Constants.MODE_KIND_VIEW || this.kind == Constants.MODE_KIND_SLIDING;
         return isNonEditor == thisIsNonEditor;

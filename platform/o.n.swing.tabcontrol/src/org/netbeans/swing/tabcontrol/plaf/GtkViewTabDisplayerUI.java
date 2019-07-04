@@ -140,7 +140,7 @@ public final class GtkViewTabDisplayerUI extends AbstractViewTabDisplayerUI {
         return super.getTxtFont();
     }     
 
-    protected void paintTabContent(Graphics g, int index, String text, int x,
+    protected void paintTabContent(Graphics g, int index, String text, Icon icon, int x,
                                    int y, int width, int height) {
         // substract lower border
         height--;

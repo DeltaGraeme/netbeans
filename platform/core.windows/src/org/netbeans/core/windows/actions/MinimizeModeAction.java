@@ -28,8 +28,10 @@ import org.openide.windows.TopComponent;
 import javax.swing.*;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
+import org.netbeans.core.windows.NbWindowImpl;
 import org.netbeans.core.windows.Constants;
 import org.netbeans.core.windows.ModeImpl;
+
 import org.netbeans.core.windows.Switches;
 import org.netbeans.core.windows.WindowManagerImpl;
 import org.openide.windows.WindowManager;
@@ -85,8 +87,9 @@ implements PropertyChangeListener {
             if( null != tc )
                 contextMode = ( ModeImpl ) WindowManagerImpl.getInstance().findMode( tc );
         }
-        if(contextMode != null) {
-            WindowManagerImpl.getInstance().userMinimizedMode( contextMode );
+        if(contextMode != null) { 
+            NbWindowImpl window = WindowManagerImpl.getInstance().getWindowForMode(contextMode);
+            WindowManagerImpl.getInstance().userMinimizedMode( window, contextMode );
         }
     }
 

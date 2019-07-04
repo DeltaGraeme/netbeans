@@ -33,6 +33,7 @@ import java.util.*;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.netbeans.core.windows.persistence.*;
+import org.netbeans.core.windows.view.dnd.ZOrderManager;
 import org.openide.awt.ToolbarPool;
 import org.openide.filesystems.FileObject;
 import org.openide.util.Exceptions;
@@ -144,7 +145,7 @@ final public class PersistenceHandler implements PersistenceObserver {
             wm.setRecentViewList(idList.toArray( new String[idList.size()]));
         }
 
-        wm.setEditorAreaConstraints(wmc.editorAreaConstraints);
+        wm.setEditorAreaConstraints(null, wmc.editorAreaConstraints);
         wm.setEditorAreaState(wmc.editorAreaState);
 
         ModeImpl activeMode    = null;
@@ -217,7 +218,7 @@ final public class PersistenceHandler implements PersistenceObserver {
         // project layer, that can cause out of synch state when switching projects...
         // setting null is however considered a valid state.
         wm.setActiveMode(activeMode);
-        wm.setEditorMaximizedMode(editorMaximizedMode);
+        wm.setEditorMaximizedMode(null, editorMaximizedMode);
         wm.setViewMaximizedMode(viewMaximizedMode);
 
         Rectangle joinedBounds = computeBounds(
@@ -271,6 +272,7 @@ final public class PersistenceHandler implements PersistenceObserver {
         wm.setToolbarConfigName(wmc.toolbarConfiguration);
         if( null != activeTopComponentOverride )
             activeTopComponentOverride.requestActive();
+        ZOrderManager.getInstance().setCapturedZOrder(wmc.zOrder);
 
         loaded = true;
     }
@@ -309,11 +311,12 @@ final public class PersistenceHandler implements PersistenceObserver {
         }
 
         ModeImpl mode;
+        NbWindowImpl window = (NbWindowImpl)WindowManagerImpl.getInstance().findNbWindow(mc.nbWindowID);
         if (mc.kind == Constants.MODE_KIND_SLIDING) {
-            mode = WindowManagerImpl.getInstance().createSlidingMode(
+            mode = WindowManagerImpl.getInstance().createSlidingMode(window,
                     mc.name, mc.permanent, mc.side, mc.slideInSizes);
         } else {
-             mode = WindowManagerImpl.getInstance().createMode(
+             mode = WindowManagerImpl.getInstance().createMode(window,
                 mc.name, mc.kind, mc.state, mc.permanent, mc.constraints);
         }
         name2mode.put(mc.name, mode);
@@ -500,6 +503,7 @@ final public class PersistenceHandler implements PersistenceObserver {
 
     private WindowManagerConfig getConfig() {
         WindowManagerConfig wmc = new WindowManagerConfig();
+        wmc.nbWindows = getConfigNbWindow(WindowManagerImpl.getInstance().getNbWindows());
 
         wmc.preferredToolbarIconSize = ToolbarPool.getDefault().getPreferredIconSize();
 
@@ -553,7 +557,7 @@ final public class PersistenceHandler implements PersistenceObserver {
         if(DEBUG) {
             debugLog("editorAreaBounds=" + wmc.editorAreaBounds); // NOI18N
         }
-        wmc.editorAreaConstraints = wmi.getEditorAreaConstraints();
+        wmc.editorAreaConstraints = wmi.getEditorAreaConstraints(null);
         if(DEBUG) {
             debugLog("editorAreaConstraints=" + Arrays.toString(wmc.editorAreaConstraints)); // NOI18N
         }
@@ -571,7 +575,7 @@ final public class PersistenceHandler implements PersistenceObserver {
             wmc.activeModeName = mo.getName();
         }
 
-        mo = wmi.getEditorMaximizedMode();
+        mo = wmi.getEditorMaximizedMode(null);
         if(DEBUG) {
             debugLog("editor maximized mode=" + mo); // NOI18N
         }
@@ -579,7 +583,7 @@ final public class PersistenceHandler implements PersistenceObserver {
             wmc.editorMaximizedModeName = mo.getName();
         }
 
-        mo = wmi.getViewMaximizedMode();
+        mo = wmi.getViewMaximizedMode(null);
         if(DEBUG) {
             debugLog("view maximized mode=" + mo); // NOI18N
         }
@@ -648,8 +652,13 @@ final public class PersistenceHandler implements PersistenceObserver {
         if(DEBUG) {
             debugLog("mode kind=" + modeCfg.kind); // NOI18N
         }
+        NbWindowImpl nbWindow = WindowManagerImpl.getInstance().getWindowForMode(mode);
+        modeCfg.nbWindowID = nbWindow == null ? "" : nbWindow.getName();
+        if(DEBUG) {
+            debugLog("mode nbWindowID=" + modeCfg.nbWindowID); // NOI18N
+        }
         if (wm instanceof WindowManagerImpl) {
-            modeCfg.side = wm.getCentral().getModeSide(mode);
+            modeCfg.side = wm.getCentral().getModeSide(null, mode); //gwi?
             if( null != modeCfg.side ) {
                 modeCfg.slideInSizes = wm.getCentral().getSlideInSizes( modeCfg.side );
             }
@@ -1138,4 +1147,10 @@ final public class PersistenceHandler implements PersistenceObserver {
         lazyLoader.loadAllNow();
     }
 
+    private NbWindowConfig[] getConfigNbWindow(Set<NbWindow> windows) {
+        List<NbWindowConfig> winConfigs = new ArrayList<NbWindowConfig>(windows.size());
+        for(NbWindow win: windows)
+            winConfigs.add(new NbWindowConfig(win.getName(), win.getBounds(), win.isDialog()));
+        return winConfigs.toArray(new NbWindowConfig[windows.size()]);
+    }
 }

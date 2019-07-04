@@ -127,7 +127,7 @@ final class TopComponentSubModel {
         if(selectedTopComponentID == null && !isNullSelectionAllowed()) {
             selectedTopComponentID = tcID;
         }
-        
+
         // XXX - should be deleted after TopComponent.isSliding is introduced
         if (kind == Constants.MODE_KIND_SLIDING) {
             setSlidingProperty(tc);
@@ -193,8 +193,7 @@ final class TopComponentSubModel {
                 adjustSelectedTopComponent(index, null);
             }
         } 
-        
-        
+
         // XXX - should be deleted after TopComponent.isSliding is introduced
         if (kind == Constants.MODE_KIND_SLIDING) {
             setSlidingProperty(tc);

@@ -181,6 +181,12 @@ public class WindowManagerConfig {
     /** List of TopComponent Ids from recent view list. */
     public String[] tcIdViewList;
     
+    /** List of NbWindows **/
+    public NbWindowConfig[] nbWindows; 
+    
+    /** Windows zorder **/
+    public String[] zOrder;
+    
     /** Creates a new instance of WindowManagerConfig */
     public WindowManagerConfig() {
         editorAreaConstraints = new SplitConstraint[0];

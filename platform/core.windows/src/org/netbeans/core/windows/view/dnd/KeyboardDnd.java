@@ -117,7 +117,7 @@ final class KeyboardDnd implements AWTEventListener, PropertyChangeListener {
                 return res;
             }
         });
-        targets.add( dndManager.getCenterPanelDroppable() );
+        targets.add( dndManager.getCenterPanelDroppable(null) );
         currentIndex = 0;
         refresh();
     }

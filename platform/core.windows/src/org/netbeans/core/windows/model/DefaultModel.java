@@ -28,6 +28,7 @@ import java.lang.ref.Reference;
 import java.lang.ref.WeakReference;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -36,13 +37,18 @@ import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.netbeans.core.windows.NbWindowImpl;
+import org.netbeans.core.windows.NbWindowStructureSnapshot.NbWindowSnapshot;
 import org.netbeans.core.windows.Constants;
 import org.netbeans.core.windows.ModeImpl;
 import org.netbeans.core.windows.ModeStructureSnapshot;
+import org.netbeans.core.windows.ModeStructureSnapshot.ModeSnapshot;
+import org.netbeans.core.windows.ModeStructureSnapshot.WindowModeStructureSnapshot;
 import org.netbeans.core.windows.SplitConstraint;
 import org.netbeans.core.windows.TopComponentGroupImpl;
 import org.netbeans.core.windows.WindowManagerImpl;
 import org.netbeans.core.windows.WindowSystemSnapshot;
+import org.openide.windows.NbWindow;
 import org.openide.windows.RetainLocation;
 import org.openide.windows.TopComponent;
 
@@ -52,14 +58,16 @@ import org.openide.windows.TopComponent;
  * @author  Peter Zavadsky
  */
 final class DefaultModel implements Model {
+    //gwi
+    private final Map<NbWindowImpl, NbWindowModel> nbWin2model = new WeakHashMap<NbWindowImpl, NbWindowModel>(4);
 
     /** ModeImpl to ModeModel. */
-    private final Map<ModeImpl, ModeModel> mode2model = 
+    private final Map<ModeImpl, ModeModel> mode2model =
             new WeakHashMap<ModeImpl, ModeModel>(10);
     /** TopComponentGroup to TopComponentGroupModel. */
-    private final Map<TopComponentGroupImpl, TopComponentGroupModel> group2model = 
+    private final Map<TopComponentGroupImpl, TopComponentGroupModel> group2model =
             new WeakHashMap<TopComponentGroupImpl, TopComponentGroupModel>(10);
-    
+
     /** Whether the current winsys is visible on the screen.
      * 'The most important' property of all winsys. */
     private boolean visible = false;
@@ -86,20 +94,22 @@ final class DefaultModel implements Model {
     private int editorAreaFrameState = Frame.NORMAL;
     /** Name of toolbars configuration. */
     private String toolbarConfigName = "Standard"; // NOI18N
+    // gwi
     /** The docking status (slided-out/docked) for TopComponents in maximized editor mode */
-    private DockingStatus maximizedDockingStatus = new DockingStatus( this );
+    private HashMap<NbWindowImpl, DockingStatus> maximizedDockingStatus = new HashMap<NbWindowImpl, DockingStatus>();
+    //gwi
     /** The docking status (slided-out/docked) for TopComponents in the default mode (nothing is maximized)*/
-    private DockingStatus defaultDockingStatus = new DefaultDockingStatus( this );
+    private HashMap<NbWindowImpl, DefaultDockingStatus> defaultDockingStatus = new HashMap<NbWindowImpl, DefaultDockingStatus>();
     /** TopComponents that are maximized when slided-in. */
     private Set<String> slideInMaximizedTopComponents = new HashSet<String>( 3 );
-    
+
     /** Modes structure. */
     private ModesSubModel modesSubModel = new ModesSubModel(this);
 
     /** Set of TopComponentGroup's. */
-    private final Set<TopComponentGroupImpl> topComponentGroups = 
+    private final Set<TopComponentGroupImpl> topComponentGroups =
             new HashSet<TopComponentGroupImpl>(5);
-    
+
     // Locks.
     /** Lock for visible property. */
     private final Object LOCK_VISIBLE = new Object();
@@ -127,13 +137,13 @@ final class DefaultModel implements Model {
     private final Object LOCK_MODES = new Object();
     /** Lock for topComponentGroups property. */
     private final Object LOCK_TOPCOMPONENT_GROUPS = new Object();
-    
+
     private final Object LOCK_PROJECT_NAME = new Object();
 
-    
+
     public DefaultModel() {
     }
-    
+
 
     /////////////////////////////////////
     // Mutator methods >>
@@ -145,31 +155,31 @@ final class DefaultModel implements Model {
             this.visible = visible;
         }
     }
-    
+
     /** Setter for mainWindowBoundsJoined property. */
     @Override
     public void setMainWindowBoundsJoined(Rectangle mainWindowBoundsJoined) {
         if(mainWindowBoundsJoined == null) {
             return;
         }
-        
+
         synchronized(LOCK_MAIN_WINDOW_BOUNDS_JOINED) {
             this.mainWindowBoundsJoined.setBounds(mainWindowBoundsJoined);
         }
     }
-    
+
     /** Setter for mainWindowBoundsSeparated property. */
     @Override
     public void setMainWindowBoundsSeparated(Rectangle mainWindowBoundsSeparated) {
         if(mainWindowBoundsSeparated == null) {
             return;
         }
-        
+
         synchronized(LOCK_MAIN_WINDOW_BOUNDS_SEPARATED) {
             this.mainWindowBoundsSeparated.setBounds(mainWindowBoundsSeparated);
         }
     }
-    
+
     /** Sets frame state of main window when editor area is in tiled(joined) state. */
     @Override
     public void setMainWindowFrameStateJoined(int frameState) {
@@ -177,7 +187,7 @@ final class DefaultModel implements Model {
             this.mainWindowFrameStateJoined = frameState;
         }
     }
-    
+
     /** Sets frame state of main window when editor area is in separated state. */
     @Override
     public void setMainWindowFrameStateSeparated(int frameState) {
@@ -192,12 +202,12 @@ final class DefaultModel implements Model {
         if(editorAreaBounds == null) {
             return;
         }
-        
+
         synchronized(LOCK_EDITOR_AREA_BOUNDS) {
             this.editorAreaBounds.setBounds(editorAreaBounds);
         }
     }
- 
+
     /** Setter of editorAreaState property. */
     @Override
     public void setEditorAreaState(int editorAreaState) {
@@ -213,79 +223,90 @@ final class DefaultModel implements Model {
             this.editorAreaFrameState = frameState;
         }
     }
-    
+
+    //gwi
     /** Sets editor area constraints. */
     @Override
-    public void setEditorAreaConstraints(SplitConstraint[] editorAreaConstraints) {
+    public void setEditorAreaConstraints(NbWindowImpl window, SplitConstraint[] editorAreaConstraints) {
         synchronized(LOCK_MODES) {
-            modesSubModel.setEditorAreaConstraints(editorAreaConstraints);
+            modesSubModel.setEditorAreaConstraints(window, editorAreaConstraints);
         }
     }
 
+    // gwi
     @Override
-    public void setModeConstraints(ModeImpl mode, SplitConstraint[] constraints) {
+    public void setModeConstraints(NbWindowImpl window, ModeImpl mode, SplitConstraint[] constraints) {
         synchronized(LOCK_MODES) {
             // PENDING create changeMode method?
-            modesSubModel.removeMode(mode);
-            modesSubModel.addMode(mode, constraints);
+            modesSubModel.removeMode(mode); // gwi?
+            modesSubModel.addMode(window, mode, constraints);
         }
     }
     
-    
-    /** Adds mode. */ 
+    // gwi
+    /** Adds mode. */
     @Override
-    public void addMode(ModeImpl mode, SplitConstraint[] constraints) {
+    public void addMode(NbWindowImpl window, ModeImpl mode, SplitConstraint[] constraints) {
         synchronized(LOCK_MODES) {
-            modesSubModel.addMode(mode, constraints);
+            modesSubModel.addMode(window, mode, constraints);
         }
     }
 
 
-
+    // gwi
     // XXX
     @Override
-    public void addModeToSide(ModeImpl mode, ModeImpl attachMode, String side) {
+    public void addModeToSide(NbWindowImpl window, ModeImpl mode, ModeImpl attachMode, String side) {
         synchronized(LOCK_MODES) {
-            modesSubModel.addModeToSide(mode, attachMode, side);
-        }
-    }
-    
-    // XXX
-    @Override
-    public void addModeAround(ModeImpl mode, String side) {
-        synchronized(LOCK_MODES) {
-            modesSubModel.addModeAround(mode, side);
-        }
-    }
-    
-    // XXX
-    @Override
-    public void addModeAroundEditor(ModeImpl mode, String side) {
-        synchronized(LOCK_MODES) {
-            modesSubModel.addModeAroundEditor(mode, side);
+            modesSubModel.addModeToSide(window, mode, attachMode, side);
         }
     }
 
+    // gwi
+    // XXX
     @Override
-    public void addSlidingMode(ModeImpl mode, String side, Map<String,Integer> slideInSizes) {
+    public void addModeAround(NbWindowImpl window, ModeImpl mode, String side) {
         synchronized(LOCK_MODES) {
-            modesSubModel.addModeSliding(mode, side, slideInSizes);
+            modesSubModel.addModeAround(window, mode, side);
         }
     }
-    
-    
+
+    // gwi
+    // XXX
+    @Override
+    public void addModeAroundEditor(NbWindowImpl window, ModeImpl mode, String side) {
+        synchronized(LOCK_MODES) {
+            modesSubModel.addModeAroundEditor(window, mode, side);
+        }
+    }
+
+    // gwi
+    @Override
+    public void addSlidingMode(NbWindowImpl window, ModeImpl mode, String side, Map<String, Integer> slideInSizes) {
+        synchronized(LOCK_MODES) {
+            modesSubModel.addModeSliding(window, mode, side, slideInSizes);
+        }
+    }
+
     /** Removes mode. */
     @Override
     public void removeMode(ModeImpl mode) {
         synchronized(LOCK_MODES) {
-            modesSubModel.removeMode(mode);
+            NbWindowImpl win = getWindowForMode(mode);
+            if(mode == modesSubModel.getEditorMaximizedMode(win) && mode.isEmpty())
+                WindowManagerImpl.getInstance().switchMaximizedMode(win, null);
+            modesSubModel.removeMode(mode); // gwi? destructive
+            //if(destructive)
+                //mode2model.remove(mode);
         }
     }
 
+    // gwi 
     /** Sets active mode. */
-    private Reference<ModeImpl> lastActiveMode = null;
+    private Reference<ModeImpl> lastActiveMode;
+    private WeakHashMap<NbWindowImpl, Reference<ModeImpl>> activeModeMap = new WeakHashMap<NbWindowImpl, Reference<ModeImpl>>();
     @Override
-    public void setActiveMode(ModeImpl activeMode) {
+    public void setActiveMode(NbWindowImpl window, ModeImpl activeMode) {
         if (lastActiveMode != null && lastActiveMode.get() == activeMode) {
             return;
         } else {
@@ -294,26 +315,29 @@ final class DefaultModel implements Model {
         synchronized(LOCK_MODES) {
             boolean success = modesSubModel.setActiveMode(activeMode);
             if (success) {
-                updateSlidingSelections(activeMode);
+                activeModeMap.put(window, new WeakReference<ModeImpl>(activeMode));
+                updateSlidingSelections(window, activeMode);
             }
         }
     }
 
+    // gwi
     /** Sets editor mode that is currenlty maximized */
     @Override
-    public void setEditorMaximizedMode(ModeImpl maximizedMode) {
+    public void setEditorMaximizedMode(NbWindowImpl window, ModeImpl maximizedMode) {
         assert null == maximizedMode || maximizedMode.getKind() == Constants.MODE_KIND_EDITOR;
         synchronized(LOCK_MODES) {
-            modesSubModel.setEditorMaximizedMode(maximizedMode);
+            modesSubModel.setEditorMaximizedMode(window, maximizedMode);
         }
     }
-    
-    /** Sets view mode that is currenlty maximized */
+
+    // gwi
+    /** Sets view mode that is currently maximized */
     @Override
-    public void setViewMaximizedMode(ModeImpl maximizedMode) {
+    public void setViewMaximizedMode(NbWindowImpl window, ModeImpl maximizedMode) {
         assert null == maximizedMode || maximizedMode.getKind() == Constants.MODE_KIND_VIEW;
         synchronized(LOCK_MODES) {
-            modesSubModel.setViewMaximizedMode(maximizedMode);
+            modesSubModel.setViewMaximizedMode(window, maximizedMode);
         }
     }
 
@@ -325,21 +349,21 @@ final class DefaultModel implements Model {
         }
     }
 
-    
+
     @Override
     public void addTopComponentGroup(TopComponentGroupImpl tcGroup) {
         synchronized(LOCK_TOPCOMPONENT_GROUPS) {
             topComponentGroups.add(tcGroup);
         }
     }
-    
+
     @Override
     public void removeTopComponentGroup(TopComponentGroupImpl tcGroup) {
         synchronized(LOCK_TOPCOMPONENT_GROUPS) {
             topComponentGroups.remove(tcGroup);
         }
     }
-    
+
     @Override
     public void reset() {
         mode2model.clear();
@@ -355,7 +379,7 @@ final class DefaultModel implements Model {
         defaultDockingStatus.clear();
         slideInMaximizedTopComponents.clear();
     }
-    
+
     /////////////////////////////////////
     // Mutator methods <<
     /////////////////////////////////////
@@ -378,7 +402,7 @@ final class DefaultModel implements Model {
             return (Rectangle)mainWindowBoundsJoined.clone();
         }
     }
-    
+
     /** Getter for mainWindowBoundsSeparated property. */
     @Override
     public Rectangle getMainWindowBoundsSeparated() {
@@ -386,14 +410,14 @@ final class DefaultModel implements Model {
             return (Rectangle)mainWindowBoundsSeparated.clone();
         }
     }
-    
+
     @Override
     public Rectangle getMainWindowBoundsSeparatedHelp() {
         synchronized(LOCK_MAIN_WINDOW_BOUNDS_SEPARATED_HELP) {
             return (Rectangle)mainWindowBoundsSeparatedHelp.clone();
         }
     }
-    
+
     /** Gets frame state of main window when editor area is in tiled(joined) state. */
     @Override
     public int getMainWindowFrameStateJoined() {
@@ -401,7 +425,7 @@ final class DefaultModel implements Model {
             return mainWindowFrameStateJoined;
         }
     }
-    
+
     /** Gets frame state of main window when editor area is in separated state. */
     @Override
     public int getMainWindowFrameStateSeparated() {
@@ -409,7 +433,7 @@ final class DefaultModel implements Model {
             return mainWindowFrameStateSeparated;
         }
     }
-    
+
     /** Getter of editorAreaState property. */
     @Override
     public int getEditorAreaState() {
@@ -417,7 +441,7 @@ final class DefaultModel implements Model {
             return this.editorAreaState;
         }
     }
-    
+
     /** */
     @Override
     public int getEditorAreaFrameState() {
@@ -425,7 +449,7 @@ final class DefaultModel implements Model {
             return this.editorAreaFrameState;
         }
     }
-    
+
     /** Getter of editorAreaBounds property. */
     @Override
     public Rectangle getEditorAreaBounds() {
@@ -433,7 +457,7 @@ final class DefaultModel implements Model {
             return (Rectangle)this.editorAreaBounds.clone();
         }
     }
-    
+
     @Override
     public Rectangle getEditorAreaBoundsHelp() {
         synchronized(LOCK_EDITOR_AREA_BOUNDS_HELP) {
@@ -441,11 +465,12 @@ final class DefaultModel implements Model {
         }
     }
 
+    // gwi
     /** Gets editor area constraints. */
     @Override
-    public SplitConstraint[] getEditorAreaConstraints() {
+    public SplitConstraint[] getEditorAreaConstraints(NbWindowImpl window) {
         synchronized(LOCK_MODES) {
-            return modesSubModel.getEditorAreaConstraints();
+            return modesSubModel.getEditorAreaConstraints(window);
         }
     }
 
@@ -456,35 +481,38 @@ final class DefaultModel implements Model {
             return modesSubModel.getModes();
         }
     }
-    
+
     @Override
-    public SplitConstraint[] getModeConstraints(ModeImpl mode) {
+    public SplitConstraint[] getModeConstraints(NbWindowImpl window, ModeImpl mode) {
         synchronized(LOCK_MODES) {
-            return modesSubModel.getModeConstraints(mode);
+            return modesSubModel.getModeConstraints(window, mode);
         }
     }
-    
+
+    // gwi
     @Override
-    public SplitConstraint[] getModelElementConstraints(ModelElement element) {
+    public SplitConstraint[] getModelElementConstraints(NbWindowImpl window, ModelElement element) {
         synchronized(LOCK_MODES) {
-            return modesSubModel.getModelElementConstraints(element);
+            return modesSubModel.getModelElementConstraints(window, element);
         }
     }
-    
+
+    // gwi
     @Override
-    public String getSlidingModeConstraints(ModeImpl mode) {
+    public String getSlidingModeConstraints(NbWindowImpl window, ModeImpl mode) {
         synchronized(LOCK_MODES) {
-            return modesSubModel.getSlidingModeConstraints(mode);
+            return modesSubModel.getSlidingModeConstraints(window, mode);
         }
     }
-    
+
+    // gwi
     @Override
-    public ModeImpl getSlidingMode(String side) {
+    public ModeImpl getSlidingMode(NbWindowImpl window, String side) {
         synchronized(LOCK_MODES) {
-            return modesSubModel.getSlidingMode(side);
+            return modesSubModel.getSlidingMode(window, side);
         }
     }
-    
+
     /** Gets active mode. */
     @Override
     public ModeImpl getActiveMode() {
@@ -492,6 +520,19 @@ final class DefaultModel implements Model {
             return modesSubModel.getActiveMode();
         }
     }
+
+    // gwi - can we replace above method?
+    @Override
+    public ModeImpl getActiveMode(NbWindowImpl window) {
+        synchronized(LOCK_MODES) {
+            Reference<ModeImpl> mRef = activeModeMap.get(window);
+            if(mRef != null) {
+                return mRef.get();
+            }
+            return null;
+        }
+    }
+
 
     /** Gets last active editor mode. */
     @Override
@@ -501,53 +542,68 @@ final class DefaultModel implements Model {
         }
     }
 
+    // gwi
     /**
      * @return The docking status (docked/slided) of TopComponents before the window system
      * switched to maximized mode.
      */
     @Override
-    public DockingStatus getDefaultDockingStatus() {
-        return defaultDockingStatus;
+    public DockingStatus getDefaultDockingStatus(NbWindowImpl window) {
+        DefaultDockingStatus status = defaultDockingStatus.get(window);
+        if(status == null) {
+            status = new DefaultDockingStatus(this);
+            defaultDockingStatus.put(window, status);
+        }
+        return status;
     }
 
+    // gwi
     /**
      * @return The docking status (docked/slided) of TopComponents in maximized editor mode.
      */
     @Override
-    public DockingStatus getMaximizedDockingStatus() {
-        return maximizedDockingStatus;
+    public DockingStatus getMaximizedDockingStatus(NbWindowImpl window) {
+        DockingStatus status = maximizedDockingStatus.get(window);
+        if(status == null) {
+            status = new DockingStatus(this);
+            maximizedDockingStatus.put(window, status);
+        }
+        return status;
     }
-    
+
+    // gwi
     /** Gets editor maximized mode. */
     @Override
-    public ModeImpl getEditorMaximizedMode() {
+    public ModeImpl getEditorMaximizedMode(NbWindowImpl window) {
         synchronized(LOCK_MODES) {
-            return modesSubModel.getEditorMaximizedMode();
+            return modesSubModel.getEditorMaximizedMode(window);
         }
     }
-    
+
+    // gwi
     /** Gets view maximized mode. */
     @Override
-    public ModeImpl getViewMaximizedMode() {
+    public ModeImpl getViewMaximizedMode(NbWindowImpl window) {
         synchronized(LOCK_MODES) {
-            return modesSubModel.getViewMaximizedMode();
+            return modesSubModel.getViewMaximizedMode(window);
         }
     }
-    
+
+    // gwi
     /**
      * Find the side (LEFT/RIGHT/BOTTOM) where the TopComponent from the given
      * mode should slide to.
-     * 
+     *
      * @param mode Mode
      * @return The slide side for TopComponents from the given mode.
      */
     @Override
-    public String getSlideSideForMode( ModeImpl mode ) {
+    public String getSlideSideForMode( NbWindowImpl window, ModeImpl mode ) {
         synchronized(LOCK_MODES) {
-            return modesSubModel.getSlideSideForMode( mode );
+            return modesSubModel.getSlideSideForMode( window, mode );
         }
     }
-    
+
     /** Getter for toolbarConfigName property. */
     @Override
     public String getToolbarConfigName() {
@@ -555,10 +611,10 @@ final class DefaultModel implements Model {
             return this.toolbarConfigName;
         }
     }
-    
-    /** 
-     * Gets the sizes (width or height) of TopComponents in the given sliding 
-     * side, the key in the Map is TopComponent's ID 
+
+    /**
+     * Gets the sizes (width or height) of TopComponents in the given sliding
+     * side, the key in the Map is TopComponent's ID
      */
     @Override
     public Map<String,Integer> getSlideInSizes(String side) {
@@ -566,7 +622,7 @@ final class DefaultModel implements Model {
             return modesSubModel.getSlideInSizes( side );
         }
     }
-    
+
     /** Set the size (width or height of the given TopComponent when it is slided in */
     @Override
     public void setSlideInSize(String side, TopComponent tc, int size) {
@@ -574,7 +630,7 @@ final class DefaultModel implements Model {
             modesSubModel.setSlideInSize(side, tc, size);
         }
     }
-    
+
     /**
      * @return True if the given TopComponent is maximized when it is slided-in.
      */
@@ -582,7 +638,7 @@ final class DefaultModel implements Model {
     public boolean isTopComponentMaximizedWhenSlidedIn( String tcid ) {
         return null != tcid && slideInMaximizedTopComponents.contains( tcid );
     }
-    
+
     /**
      * Set whether the given TopComponent is maximized when it is slided-in.
      */
@@ -599,8 +655,8 @@ final class DefaultModel implements Model {
     /////////////////////////////////////
     // Accessor methods <<
     /////////////////////////////////////
-    
-    
+
+
     ///////////////////
     // Mode specific >>
     @Override
@@ -617,7 +673,7 @@ final class DefaultModel implements Model {
             return (ModeModel)mode2model.get(mode);
         }
     }
-    
+
     // Mutators
     /** Sets state. */
     @Override
@@ -627,7 +683,7 @@ final class DefaultModel implements Model {
             modeModel.setState(state);
         }
     }
-    
+
     /** Sets bounds. */
     @Override
     public void setModeBounds(ModeImpl mode, Rectangle bounds) {
@@ -636,7 +692,7 @@ final class DefaultModel implements Model {
             modeModel.setBounds(bounds);
         }
     }
-    
+
     /** Sets frame state. */
     @Override
     public void setModeFrameState(ModeImpl mode, int frameState) {
@@ -644,17 +700,22 @@ final class DefaultModel implements Model {
         if(modeModel != null) {
             modeModel.setFrameState(frameState);
         }
-    } 
-    
+    }
+
     /** Sets seleted TopComponent. */
     @Override
     public void setModeSelectedTopComponent(ModeImpl mode, TopComponent selected) {
         ModeModel modeModel = getModelForMode(mode);
         if(modeModel != null) {
             modeModel.setSelectedTopComponent(selected);
+
+            // make sure window is visible // gwi?
+            NbWindowImpl window = WindowManagerImpl.getInstance().getWindowForMode(mode);
+            if(window != null && !window.isVisible())
+                window.setVisible(true);
         }
     }
-    
+
     /** Remember which top component was the selected one before switching to/from maximized mode */
     @Override
     public void setModePreviousSelectedTopComponentID(ModeImpl mode, String prevSelectedId) {
@@ -663,7 +724,7 @@ final class DefaultModel implements Model {
             modeModel.setPreviousSelectedTopComponentID(prevSelectedId);
         }
     }
-    
+
     /** Adds opened TopComponent. */
     @Override
     public void addModeOpenedTopComponent(ModeImpl mode, TopComponent tc) {
@@ -681,7 +742,7 @@ final class DefaultModel implements Model {
             modeModel.insertOpenedTopComponent(tc, index);
         }
     }
-    
+
     /** Adds closed TopComponent. */
     @Override
     public void addModeClosedTopComponent(ModeImpl mode, TopComponent tc) {
@@ -699,7 +760,7 @@ final class DefaultModel implements Model {
             modeModel.addUnloadedTopComponent(tcID, index);
         }
     }
-    
+
     // XXX
     @Override
     public void setModeUnloadedSelectedTopComponent(ModeImpl mode, String tcID) {
@@ -708,7 +769,7 @@ final class DefaultModel implements Model {
             modeModel.setUnloadedSelectedTopComponent(tcID);
         }
     }
-    
+
     @Override
     public void setModeUnloadedPreviousSelectedTopComponent(ModeImpl mode, String tcID) {
         ModeModel modeModel = getModelForMode(mode);
@@ -716,7 +777,7 @@ final class DefaultModel implements Model {
             modeModel.setUnloadedPreviousSelectedTopComponent(tcID);
         }
     }
-    
+
     /** */
     @Override
     public void removeModeTopComponent(ModeImpl mode, TopComponent tc, TopComponent recentTc) {
@@ -725,7 +786,7 @@ final class DefaultModel implements Model {
             modeModel.removeTopComponent(tc, recentTc);
         }
     }
-    
+
     // XXX
     @Override
     public void removeModeClosedTopComponentID(ModeImpl mode, String tcID) {
@@ -738,7 +799,7 @@ final class DefaultModel implements Model {
     /**
      * @param mode - sliding mode
      */
-    
+
     @Override
     public void setModeTopComponentPreviousConstraints(ModeImpl mode, String tcID, SplitConstraint[] constraints) {
         ModeModel modeModel = getModelForMode(mode);
@@ -746,7 +807,7 @@ final class DefaultModel implements Model {
             modeModel.setTopComponentPreviousConstraints(tcID, constraints);
         }
     }
-    
+
     /**
      * @param mode - sliding mode
      * @param previousMode - the original mode.
@@ -759,7 +820,7 @@ final class DefaultModel implements Model {
             modeModel.setTopComponentPreviousMode(tcID, previousMode, prevIndex);
         }
     }
-    
+
     // Accessors
     /** Gets programatic name of mode. */
     @Override
@@ -777,7 +838,7 @@ final class DefaultModel implements Model {
         ModeModel modeModel = getModelForMode(mode);
         modeModel.setName(name);
     }
-    
+
     /** Gets bounds. */
     @Override
     public Rectangle getModeBounds(ModeImpl mode) {
@@ -788,7 +849,7 @@ final class DefaultModel implements Model {
             return null;
         }
     }
-    
+
     @Override
     public Rectangle getModeBoundsSeparatedHelp(ModeImpl mode) {
         ModeModel modeModel = getModelForMode(mode);
@@ -798,7 +859,7 @@ final class DefaultModel implements Model {
             return null;
         }
     }
-    
+
     /** Gets state. */
     @Override
     public int getModeState(ModeImpl mode) {
@@ -809,7 +870,7 @@ final class DefaultModel implements Model {
             return -1;
         }
     }
-    
+
     /** Gets kind. */
     @Override
     public int getModeKind(ModeImpl mode) {
@@ -821,13 +882,14 @@ final class DefaultModel implements Model {
         }
     }
 
+    // gwi
     /** Gets side. */
     @Override
-    public String getModeSide(ModeImpl mode) {
-        String side = modesSubModel.getSlidingModeConstraints(mode);
+    public String getModeSide(NbWindowImpl window, ModeImpl mode) {
+        String side = modesSubModel.getSlidingModeConstraints(window, mode);
         return side;
     }
-    
+
     /** Gets frame state. */
     @Override
     public int getModeFrameState(ModeImpl mode) {
@@ -838,7 +900,7 @@ final class DefaultModel implements Model {
             return -1;
         }
     }
-    
+
     /** Gets used defined. */
     @Override
     public boolean isModePermanent(ModeImpl mode) {
@@ -859,14 +921,14 @@ final class DefaultModel implements Model {
             return false;
         }
     }
-    
+
     @Override
     public void makeModePermanent( ModeImpl mode ) {
         ModeModel modeModel = getModelForMode(mode);
         if(modeModel != null)
             modeModel.makePermanent();
     }
-    
+
     /** Indicates whether the mode is empty. */
     @Override
     public boolean isModeEmpty(ModeImpl mode) {
@@ -877,7 +939,7 @@ final class DefaultModel implements Model {
             return false;
         }
     }
-    
+
     /** Indicates whether the mode contains the TopComponent. */
     @Override
     public boolean containsModeTopComponent(ModeImpl mode, TopComponent tc) {
@@ -888,7 +950,7 @@ final class DefaultModel implements Model {
             return false;
         }
     }
-    
+
     /** Gets selected TopComponent. */
     @Override
     public TopComponent getModeSelectedTopComponent(ModeImpl mode) {
@@ -899,7 +961,7 @@ final class DefaultModel implements Model {
             return null;
         }
     }
-    
+
     /** Get the ID of top component that had been the selected one before switching to/from maximzied mode */
     @Override
     public String getModePreviousSelectedTopComponentID(ModeImpl mode) {
@@ -910,7 +972,7 @@ final class DefaultModel implements Model {
             return null;
         }
     }
-    
+
     /** Gets list of top components. */
     @Override
     public List<TopComponent> getModeTopComponents(ModeImpl mode) {
@@ -921,7 +983,7 @@ final class DefaultModel implements Model {
             return Collections.emptyList();
         }
     }
-    
+
     /** Gets list of top components. */
     @Override
     public List<TopComponent> getModeOpenedTopComponents(ModeImpl mode) {
@@ -932,7 +994,7 @@ final class DefaultModel implements Model {
             return Collections.emptyList();
         }
     }
-    
+
     // XXX
     @Override
     public List<String> getModeOpenedTopComponentsIDs(ModeImpl mode) {
@@ -943,7 +1005,7 @@ final class DefaultModel implements Model {
             return Collections.emptyList();
         }
     }
-    
+
     @Override
     public int getModeOpenedTopComponentTabPosition(ModeImpl mode, TopComponent tc) {
         ModeModel modeModel = getModelForMode(mode);
@@ -953,7 +1015,7 @@ final class DefaultModel implements Model {
             return -1;
         }
     }
-    
+
     @Override
     public List<String> getModeClosedTopComponentsIDs(ModeImpl mode) {
         ModeModel modeModel = getModelForMode(mode);
@@ -963,7 +1025,7 @@ final class DefaultModel implements Model {
             return Collections.emptyList();
         }
     }
-    
+
     @Override
     public List<String> getModeTopComponentsIDs(ModeImpl mode) {
         ModeModel modeModel = getModelForMode(mode);
@@ -973,26 +1035,26 @@ final class DefaultModel implements Model {
             return Collections.emptyList();
         }
     }
-    
+
     @Override
     public SplitConstraint[] getModeTopComponentPreviousConstraints(ModeImpl mode, String tcID) {
         ModeModel modeModel = getModelForMode(mode);
         return modeModel == null ? null : modeModel.getTopComponentPreviousConstraints(tcID);
     }
-    
+
     @Override
     public ModeImpl getModeTopComponentPreviousMode(ModeImpl mode, String tcID) {
         ModeModel modeModel = getModelForMode(mode);
         return modeModel == null ? null : modeModel.getTopComponentPreviousMode(tcID);
     }
-    
+
     /** Gets the tab index of the given top component before it was moved to sliding/separate mode */
     @Override
     public int getModeTopComponentPreviousIndex(ModeImpl mode, String tcID) {
         ModeModel modeModel = getModelForMode(mode);
         return modeModel == null ? null : modeModel.getTopComponentPreviousIndex(tcID);
     }
-    
+
 
     @Override
     public boolean isModeMinimized( ModeImpl mode ) {
@@ -1035,7 +1097,7 @@ final class DefaultModel implements Model {
 
     // End of mode specific.
 
-    
+
     ////////////////////////////////////
     // TopComponentGroup specific >>
     @Override
@@ -1052,7 +1114,7 @@ final class DefaultModel implements Model {
         }
     }
 
-    
+
     @Override
     public Set<TopComponentGroupImpl> getTopComponentGroups() {
         synchronized(LOCK_TOPCOMPONENT_GROUPS) {
@@ -1070,25 +1132,25 @@ final class DefaultModel implements Model {
             return null;
         }
     }
-    
+
     @Override
-    public void openGroup(TopComponentGroupImpl tcGroup, 
-            Collection<TopComponent> openedTopComponents, 
+    public void openGroup(TopComponentGroupImpl tcGroup,
+            Collection<TopComponent> openedTopComponents,
             Collection<TopComponent> openedBeforeTopComponents) {
         TopComponentGroupModel groupModel = getModelForGroup(tcGroup);
         if(groupModel != null) {
             groupModel.open(openedTopComponents, openedBeforeTopComponents);
         }
     }
-    
+
     @Override
     public void closeGroup(TopComponentGroupImpl tcGroup) {
         TopComponentGroupModel groupModel = getModelForGroup(tcGroup);
         if(groupModel != null) {
             groupModel.close();
-        } 
+        }
     }
-    
+
     @Override
     public boolean isGroupOpened(TopComponentGroupImpl tcGroup) {
         TopComponentGroupModel groupModel = getModelForGroup(tcGroup);
@@ -1098,7 +1160,7 @@ final class DefaultModel implements Model {
             return false;
         }
     }
-    
+
     @Override
     public Set<TopComponent> getGroupTopComponents(TopComponentGroupImpl tcGroup) {
         TopComponentGroupModel groupModel = getModelForGroup(tcGroup);
@@ -1108,7 +1170,7 @@ final class DefaultModel implements Model {
             return Collections.emptySet();
         }
     }
-    
+
     @Override
     public Set<TopComponent> getGroupOpenedTopComponents(TopComponentGroupImpl tcGroup) {
         TopComponentGroupModel groupModel = getModelForGroup(tcGroup);
@@ -1118,7 +1180,7 @@ final class DefaultModel implements Model {
             return Collections.emptySet();
         }
     }
-    
+
     @Override
     public Set<TopComponent> getGroupOpenedBeforeTopComponents(TopComponentGroupImpl tcGroup) {
         TopComponentGroupModel groupModel = getModelForGroup(tcGroup);
@@ -1128,7 +1190,7 @@ final class DefaultModel implements Model {
             return Collections.emptySet();
         }
     }
-    
+
     @Override
     public Set<TopComponent> getGroupOpeningTopComponents(TopComponentGroupImpl tcGroup) {
         TopComponentGroupModel groupModel = getModelForGroup(tcGroup);
@@ -1138,7 +1200,7 @@ final class DefaultModel implements Model {
             return Collections.emptySet();
         }
     }
-    
+
     @Override
     public Set<TopComponent> getGroupClosingTopComponents(TopComponentGroupImpl tcGroup) {
         TopComponentGroupModel groupModel = getModelForGroup(tcGroup);
@@ -1158,7 +1220,7 @@ final class DefaultModel implements Model {
             return false;
         }
     }
-    
+
     @Override
     public boolean removeGroupUnloadedTopComponent(TopComponentGroupImpl tcGroup, String tcID) {
         TopComponentGroupModel groupModel = getModelForGroup(tcGroup);
@@ -1168,7 +1230,7 @@ final class DefaultModel implements Model {
             return false;
         }
     }
-    
+
     @Override
     public boolean addGroupOpeningTopComponent(TopComponentGroupImpl tcGroup, TopComponent tc) {
         TopComponentGroupModel groupModel = getModelForGroup(tcGroup);
@@ -1178,7 +1240,7 @@ final class DefaultModel implements Model {
             return false;
         }
     }
-    
+
     @Override
     public boolean removeGroupOpeningTopComponent(TopComponentGroupImpl tcGroup, TopComponent tc) {
         TopComponentGroupModel groupModel = getModelForGroup(tcGroup);
@@ -1188,7 +1250,7 @@ final class DefaultModel implements Model {
             return false;
         }
     }
-    
+
     @Override
     public boolean addGroupUnloadedOpeningTopComponent(TopComponentGroupImpl tcGroup, String tcID) {
         TopComponentGroupModel groupModel = getModelForGroup(tcGroup);
@@ -1198,7 +1260,7 @@ final class DefaultModel implements Model {
             return false;
         }
     }
-    
+
     @Override
     public boolean removeGroupUnloadedOpeningTopComponent(TopComponentGroupImpl tcGroup, String tcID) {
         TopComponentGroupModel groupModel = getModelForGroup(tcGroup);
@@ -1208,7 +1270,7 @@ final class DefaultModel implements Model {
             return false;
         }
     }
-    
+
     @Override
     public boolean addGroupUnloadedClosingTopComponent(TopComponentGroupImpl tcGroup, String tcID) {
         TopComponentGroupModel groupModel = getModelForGroup(tcGroup);
@@ -1237,7 +1299,7 @@ final class DefaultModel implements Model {
             return false;
         }
     }
-    
+
     // XXX>>
     @Override
     public Set<String> getGroupTopComponentsIDs(TopComponentGroupImpl tcGroup) {
@@ -1248,7 +1310,7 @@ final class DefaultModel implements Model {
             return Collections.emptySet();
         }
     }
-    
+
     @Override
     public Set<String> getGroupOpeningSetIDs(TopComponentGroupImpl tcGroup) {
         TopComponentGroupModel groupModel = getModelForGroup(tcGroup);
@@ -1258,7 +1320,7 @@ final class DefaultModel implements Model {
             return Collections.emptySet();
         }
     }
-    
+
     @Override
     public Set<String> getGroupClosingSetIDs(TopComponentGroupImpl tcGroup) {
         TopComponentGroupModel groupModel = getModelForGroup(tcGroup);
@@ -1268,7 +1330,7 @@ final class DefaultModel implements Model {
             return Collections.emptySet();
         }
     }
-    
+
     @Override
     public Set<String> getGroupOpenedTopComponentsIDs(TopComponentGroupImpl tcGroup) {
         TopComponentGroupModel groupModel = getModelForGroup(tcGroup);
@@ -1281,29 +1343,29 @@ final class DefaultModel implements Model {
     // XXX<<
     // TopComponentGroup specific <<
     ////////////////////////////////////
-    
+
     @Override
     public void setMainWindowBoundsUserSeparatedHelp(Rectangle bounds) {
         if(bounds == null) {
             return;
         }
-        
+
         synchronized(LOCK_MAIN_WINDOW_BOUNDS_SEPARATED_HELP) {
             this.mainWindowBoundsSeparatedHelp.setBounds(bounds);
         }
     }
-    
+
     @Override
     public void setEditorAreaBoundsUserHelp(Rectangle bounds) {
         if(bounds == null) {
             return;
         }
-        
+
         synchronized(LOCK_EDITOR_AREA_BOUNDS_HELP) {
             this.editorAreaBoundsHelp.setBounds(bounds);
         }
     }
-    
+
     @Override
     public void setModeBoundsSeparatedHelp(ModeImpl mode, Rectangle bounds) {
         ModeModel modeModel = getModelForMode(mode);
@@ -1311,18 +1373,20 @@ final class DefaultModel implements Model {
             modeModel.setBoundsSeparatedHelp(bounds);
         }
     }
-    
+
+    // gwi
     @Override
-    public void setSplitWeights( ModelElement[] snapshots, double[] splitWeights ) {
+    public void setSplitWeights( NbWindowImpl window, ModelElement[] snapshots, double[] splitWeights ) {
         synchronized(LOCK_MODES) {
-            modesSubModel.setSplitWeights(snapshots, splitWeights);
+            modesSubModel.setSplitWeights(window, snapshots, splitWeights);
         }
     }
-    
+
     // Controller updates <<
     /////////////////////////
 
 
+    // gwi
     @Override
     public WindowSystemSnapshot createWindowSystemSnapshot() {
         WindowSystemSnapshot wsms = new WindowSystemSnapshot();
@@ -1330,12 +1394,18 @@ final class DefaultModel implements Model {
         // PENDING
         ModeStructureSnapshot mss = createModeStructureSnapshot();
         wsms.setModeStructureSnapshot(mss);
-        
+
         ModeImpl activeMode = getActiveMode();
         wsms.setActiveModeSnapshot(activeMode == null ? null : mss.findModeSnapshot(activeMode.getName()));
-        
-        ModeImpl maximizedMode = null != getViewMaximizedMode() ? getViewMaximizedMode() : null;
-        wsms.setMaximizedModeSnapshot(maximizedMode == null ? null : mss.findModeSnapshot(maximizedMode.getName()));
+
+
+        HashMap<NbWindowSnapshot, ModeSnapshot> maxMap = new HashMap<NbWindowSnapshot, ModeSnapshot>();
+        for(NbWindowImpl win: nbWin2model.keySet()) {
+            ModeImpl maximizedMode = null != getViewMaximizedMode(win) ? getViewMaximizedMode(win) : null;
+            maxMap.put(new NbWindowSnapshot(win), maximizedMode == null ? null : mss.findModeSnapshot(maximizedMode.getName()));
+        }
+        wsms.setMaximizedModeSnapshot(maxMap);
+
 
         wsms.setMainWindowBoundsJoined(getMainWindowBoundsJoined());
         wsms.setMainWindowBoundsSeparated(getMainWindowBoundsSeparated());
@@ -1348,22 +1418,20 @@ final class DefaultModel implements Model {
         return wsms;
     }
 
+    // gwi
     /** Creates modes snapshot.. */
     private ModeStructureSnapshot createModeStructureSnapshot() {
-        ModeStructureSnapshot.ElementSnapshot splitRoot;
+        Map<NbWindowSnapshot, WindowModeStructureSnapshot> windowModeStructureSnapshots;
         Set<ModeStructureSnapshot.ModeSnapshot> separateModes;
-        Set<ModeStructureSnapshot.SlidingModeSnapshot> slidingModes;
         synchronized(LOCK_MODES) {
-            splitRoot = modesSubModel.createSplitSnapshot();
-            separateModes = modesSubModel.createSeparateModeSnapshots();
-            slidingModes = modesSubModel.createSlidingModeSnapshots();
+            windowModeStructureSnapshots = modesSubModel.createWindowModeStructureSnapshots();
+            separateModes = modesSubModel.createSeparateModeSnapshots(null);
         }
-        
-        ModeStructureSnapshot ms =  new ModeStructureSnapshot(splitRoot, separateModes, slidingModes);
+        ModeStructureSnapshot ms =  new ModeStructureSnapshot(windowModeStructureSnapshots, separateModes);
         return ms;
     }
     ///////////////////////////////////////////////////
-    
+
     /** Checks whether the mode isn't null.  */
     private static boolean validateAddingMode(ModeImpl mode) {
         if(mode == null) {
@@ -1371,16 +1439,17 @@ final class DefaultModel implements Model {
                               new java.lang.NullPointerException("Not allowed null mode")); // NOI18N
             return false;
         }
-        
+
         return true;
     }
-    
+
+    // gwi
     /** Keeps selected components of sliding modes in sync with given current
      * active mode. Sliding mode can have non-null selection (=slide) only if
      * it is active mode as well
-     */   
-    private void updateSlidingSelections (ModeImpl curActive) {
-        Set slidingModes = modesSubModel.getSlidingModes();
+     */
+    private void updateSlidingSelections (NbWindowImpl window, ModeImpl curActive) {
+        Set slidingModes = modesSubModel.getSlidingModes(window);
         ModeImpl curSliding = null;
         for (Iterator iter = slidingModes.iterator(); iter.hasNext(); ) {
             curSliding = (ModeImpl)iter.next();
@@ -1397,9 +1466,9 @@ final class DefaultModel implements Model {
         public DefaultDockingStatus( Model model ) {
             super( model );
         }
-        
+
         /**
-         * When switching back to default mode, only slide those TopComponents 
+         * When switching back to default mode, only slide those TopComponents
          * there were slided-out before.
          */
     @Override
@@ -1414,7 +1483,7 @@ final class DefaultModel implements Model {
         public boolean shouldDock( String tcID ) {
             return null != tcID && (docked.contains( tcID ) || (!docked.contains( tcID ) && !slided.contains( tcID )));
         }
-        
+
     @Override
         public void mark() {
             super.mark();
@@ -1427,11 +1496,100 @@ final class DefaultModel implements Model {
                 //also remember which top component is the selected one
                 String selTcId = null;
                 TopComponent selTc = modeImpl.getSelectedTopComponent();
-                if( null != selTc ) 
+                if( null != selTc )
                     selTcId = WindowManagerImpl.getInstance().findTopComponentID(selTc);
                 modeImpl.setPreviousSelectedTopComponentID( selTcId );
             }
         }
+    }
+
+    // gwi
+    @Override
+    public void createNbWindowModel(NbWindowImpl window, String name, Rectangle bounds) {
+        synchronized(nbWin2model) {
+            NbWindowModel wm = new DefaultNbWindowModel(name, bounds);
+            nbWin2model.put(window, wm);
+
+            // Create an editor model
+            modesSubModel.createNbWindowEditorSplitSubModel(window);
+        }
+    }
+
+    @Override
+    public Rectangle getNbWindowBounds(NbWindow window) {
+        synchronized(nbWin2model) {
+            return nbWin2model.get(window).getBounds();
+        }
+    }
+
+    @Override
+    public String getNbWindowName(NbWindow window) {
+        synchronized(nbWin2model) {
+            NbWindowModel win = nbWin2model.get(window);
+            if(win == null)  // TODO is this necessary?
+                return null;
+            return win.getName();
+        }
+    }
+
+    @Override
+    public boolean isNbWindowVisible(NbWindowImpl window) {
+        synchronized(nbWin2model) {
+            return nbWin2model.get(window).isVisible();
+        }
+    }
+
+
+
+    @Override
+    public void setNbWindowVisible(NbWindowImpl window, boolean visible) {
+        synchronized(nbWin2model) {
+            if(nbWin2model.get(window) != null)
+                nbWin2model.get(window).setVisible(visible);
+        }
+    }
+
+    @Override
+    public void removeNbWindow(NbWindowImpl window) {
+        synchronized(nbWin2model) {
+            nbWin2model.remove(window);
+            modesSubModel.removeNbWindow(window);
+        }
+    }
+
+    @Override
+    public void setNbWindowBounds(NbWindowImpl window, Rectangle bounds) {
+        synchronized(nbWin2model) {
+            nbWin2model.get(window).setBounds(bounds);
+        }
+    }
+
+    @Override
+    public Set<NbWindowImpl> getNbWindows() {
+        synchronized(nbWin2model) {
+            return nbWin2model.keySet();
+        }
+    }
+
+    public NbWindowImpl findNbWindow(String name) {
+        synchronized(nbWin2model) {
+            for(NbWindowImpl win: nbWin2model.keySet()) {
+                if(win.getName().equals(name)) {
+                    return win;
+                }
+            }
+            return null;
+        }
+    }
+
+    @Override
+    public Set<ModeImpl> getModesForWindow(NbWindowImpl window) {
+        return modesSubModel.getModesForWindow(window);
+    }
+
+    @Override
+    public NbWindowImpl getWindowForMode(ModeImpl mode) {
+        return modesSubModel.getWindowForMode(mode);
     }
 }
 

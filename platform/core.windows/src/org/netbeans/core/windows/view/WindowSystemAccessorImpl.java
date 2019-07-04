@@ -22,6 +22,7 @@ package org.netbeans.core.windows.view;
 
 
 import java.awt.*;
+import java.util.Map;
 
 
 /**
@@ -42,7 +43,7 @@ final class WindowSystemAccessorImpl implements WindowSystemAccessor {
     private int editorAreaFrameState;
     private Rectangle editorAreaBounds;
     private ModeAccessor activeMode;
-    private ModeAccessor maximizedMode;
+    private Map<NbWindowAccessor, ModeAccessor> maximizedMode;
     private ModeStructureAccessor modeStructureAccessor;
     
     public WindowSystemAccessorImpl() {
@@ -118,12 +119,12 @@ final class WindowSystemAccessorImpl implements WindowSystemAccessor {
     }
     
     /** */
-    public void setMaximizedModeAccessor(ModeAccessor maximizedMode) {
+    public void setMaximizedModeAccessor(Map<NbWindowAccessor, ModeAccessor> maximizedMode) {
         this.maximizedMode = maximizedMode;
     }
     
     /** Gets maximized mode. */
-    public ModeAccessor getMaximizedModeAccessor() {
+    public Map<NbWindowAccessor, ModeAccessor> getMaximizedModeAccessor() {
         return maximizedMode;
     }
 

@@ -281,6 +281,7 @@ public abstract class AbstractViewTabDisplayerUI extends TabDisplayerUI {
         TabData tabData;
         int x, y, width, height;
         String text;
+        Icon icon = null;
         
         paintDisplayerBackground( g, c );
 
@@ -292,10 +293,15 @@ public abstract class AbstractViewTabDisplayerUI extends TabDisplayerUI {
             width = layoutModel.getW(i);
             height = layoutModel.getH(i);
             text = tabData.getText();
+            
+            if (Boolean.getBoolean("netbeans.winsys.enhanced")) {
+                icon = tabData.getIcon();
+            }
+             
             // perform paint
             if (g.hitClip(x, y, width, height)) {
                 paintTabBackground(g, i, x, y, width, height);
-                paintTabContent(g, i, text, x, y, width, height);
+                paintTabContent(g, i, text, icon, x, y, width, height);
                 paintTabBorder(g, i, x, y, width, height);
             }
         }
@@ -392,7 +398,7 @@ public abstract class AbstractViewTabDisplayerUI extends TabDisplayerUI {
         return fm;
     }
 
-    protected abstract void paintTabContent(Graphics g, int index, String text,
+    protected abstract void paintTabContent(Graphics g, int index, String text, Icon icon,
                                             int x, int y, int width,
                                             int height);
 

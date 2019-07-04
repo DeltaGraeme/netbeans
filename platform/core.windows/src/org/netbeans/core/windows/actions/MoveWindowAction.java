@@ -95,7 +95,7 @@ implements PropertyChangeListener {
             
         if( null == mode 
 //                || mode.getKind() == Constants.MODE_KIND_EDITOR
-                || WindowManagerImpl.getInstance().getCurrentMaximizedMode() != null ) {
+                || WindowManagerImpl.getInstance().getCurrentMaximizedMode(null) != null ) {
             setEnabled( false );
             return;
         }

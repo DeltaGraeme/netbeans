@@ -23,11 +23,15 @@ package org.netbeans.core.windows.view;
 
 import org.netbeans.core.windows.Debug;
 import org.netbeans.core.windows.ModeStructureSnapshot;
-import org.netbeans.core.windows.ModeStructureSnapshot.ElementSnapshot;
 import org.netbeans.core.windows.WindowSystemSnapshot;
 
 import java.util.*;
+import org.netbeans.core.windows.ModeStructureSnapshot.ModeSnapshot;
+import org.netbeans.core.windows.ModeStructureSnapshot.WindowModeStructureSnapshot;
+import org.netbeans.core.windows.NbWindowImpl;
+import org.netbeans.core.windows.NbWindowStructureSnapshot.NbWindowSnapshot;
 import org.netbeans.core.windows.model.ModelElement;
+import org.netbeans.core.windows.view.NbWindowStructureAccessorImpl.NbWindowAccessorImpl;
 
 
 
@@ -67,8 +71,14 @@ final class ViewHelper {
         ModeStructureSnapshot.ModeSnapshot activeSnapshot = wss.getActiveModeSnapshot();
         wsa.setActiveModeAccessor(activeSnapshot == null ? null : msa.findModeAccessor(activeSnapshot.getName()));
         
-        ModeStructureSnapshot.ModeSnapshot maximizedSnapshot = wss.getMaximizedModeSnapshot();
-        wsa.setMaximizedModeAccessor(maximizedSnapshot == null ? null : msa.findModeAccessor(maximizedSnapshot.getName()));
+        Map<NbWindowSnapshot, ModeSnapshot> maximizedSnapshot = wss.getMaximizedModeSnapshot();
+        Map<NbWindowAccessor, ModeAccessor> maximizedAccessors = new HashMap<NbWindowAccessor, ModeAccessor>();
+        for(NbWindowSnapshot aws: maximizedSnapshot.keySet()) {
+            ModeSnapshot ms = maximizedSnapshot.get(aws);
+            ModeAccessor ma = ms == null ? null : msa.findModeAccessor(ms.getName());
+            maximizedAccessors.put(new NbWindowAccessorImpl(aws), ma);
+        }
+        wsa.setMaximizedModeAccessor(maximizedAccessors);
 
         wsa.setMainWindowBoundsJoined(wss.getMainWindowBoundsJoined());
         wsa.setMainWindowBoundsSeparated(wss.getMainWindowBoundsSeparated());
@@ -82,12 +92,20 @@ final class ViewHelper {
     }
     
     private static ModeStructureAccessorImpl createModeStructureAccessor(ModeStructureSnapshot mss) {
-        ElementAccessor splitRoot = createVisibleAccessor(mss.getSplitRootSnapshot());
-        Set<ModeAccessor> separateModes = createSeparateModeAccessors(mss.getSeparateModeSnapshots());
-        Set<SlidingAccessor> slidingModes = createSlidingModeAccessors(mss.getSlidingModeSnapshots());
+        Map<NbWindowSnapshot, WindowModeStructureSnapshot> windows = mss.getWindowModeStructures();
+        Map<NbWindowAccessor, WindowModeStructureAccessor> windowAccessors = new HashMap<NbWindowAccessor, WindowModeStructureAccessor>();
+
+        Set<ModeAccessor> separateModes = createSeparateModeAccessors(mss.getSeparateModeSnapshots());        
         
-        ModeStructureAccessorImpl msa =  new ModeStructureAccessorImpl(splitRoot, separateModes, slidingModes);
-        return msa;
+        // null window will be the main-window, all others are nbwindows
+        for(NbWindowSnapshot windowSnapshot: windows.keySet()) {
+            WindowModeStructureSnapshot wmss = windows.get(windowSnapshot);            
+            WindowModeStructureAccessor wmsa = new WindowModeStructureAccessorImpl(
+                    createVisibleAccessor(wmss.getSplitRootSnapshot()), 
+                    createSlidingModeAccessors(windowSnapshot, wmss.getSlidingModeSnapshots()));            
+            windowAccessors.put(new NbWindowAccessorImpl(windowSnapshot), wmsa);  
+        }        
+        return new ModeStructureAccessorImpl(windowAccessors, separateModes);
     }
     
     private static Set<ModeAccessor> createSeparateModeAccessors(ModeStructureSnapshot.ModeSnapshot[] separateModeSnapshots) {
@@ -104,12 +122,13 @@ final class ViewHelper {
         return s;
     }
     
-    private static Set<SlidingAccessor> createSlidingModeAccessors(ModeStructureSnapshot.SlidingModeSnapshot[] slidingModeSnapshots) {
+    private static Set<SlidingAccessor> createSlidingModeAccessors(NbWindowSnapshot windowSnapshot, ModeStructureSnapshot.SlidingModeSnapshot[] slidingModeSnapshots) {
         Set<SlidingAccessor> s = new HashSet<SlidingAccessor>();
         ModeStructureSnapshot.SlidingModeSnapshot snapshot; 
         for(int i = 0; i < slidingModeSnapshots.length; i++) {
             snapshot = slidingModeSnapshots[i];
             s.add(new ModeStructureAccessorImpl.SlidingAccessorImpl(
+                windowSnapshot,
                 snapshot.getOriginator(),
                 snapshot,
                 snapshot.getSide(),
@@ -219,7 +238,7 @@ final class ViewHelper {
      * @param controllerHandler
      *
      */
-    public static void setSplitWeights(SplitAccessor splitAccessor,
+    public static void setSplitWeights(NbWindowImpl window, SplitAccessor splitAccessor,
         ElementAccessor[] children, double[] splitWeights, ControllerHandler controllerHandler) {
         
         ModeStructureSnapshot.SplitSnapshot splitSnapshot = (ModeStructureSnapshot.SplitSnapshot)splitAccessor.getSnapshot();
@@ -242,7 +261,7 @@ final class ViewHelper {
             splitWeights[ i ] = correctNestedSplitWeight( snapshot.getParent(), splitWeights[i] );
         }
 
-        controllerHandler.userChangedSplit( elements, splitWeights );
+        controllerHandler.userChangedSplit( window, elements, splitWeights );
     }
     
     /**

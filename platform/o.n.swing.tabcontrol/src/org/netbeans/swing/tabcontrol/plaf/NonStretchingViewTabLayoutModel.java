@@ -166,6 +166,12 @@ final class NonStretchingViewTabLayoutModel implements TabLayoutModel {
         for (int i = 0; i < size; i++) {
             tabIndex = i;
             curText = model.getTab(tabIndex).getText();
+            if(Boolean.getBoolean("netbeans.winsys.enhanced")) {
+                Icon icon = model.getTab(tabIndex).getIcon();
+                if(icon != null) {
+                    curX += icon.getIconWidth();
+                }
+            }
             curX += HtmlRenderer.renderString(curText, BasicScrollingTabDisplayerUI.getOffscreenGraphics(), 0, 0,
                                        Integer.MAX_VALUE,
                                        Integer.MAX_VALUE, tabDisplayer.getFont(),

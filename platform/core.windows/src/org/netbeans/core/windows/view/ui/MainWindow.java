@@ -523,13 +523,18 @@ public final class MainWindow {
    }
 
    private void initListeners() {
-       frame.addWindowListener (new WindowAdapter() {
-               @Override
-               public void windowClosing(WindowEvent evt) {
-                   LifecycleManager.getDefault().exit();
-               }
+       frame.addWindowListener(new WindowAdapter() {
+           @Override
+           public void windowActivated(WindowEvent e) {
+               WindowManagerImpl wm = WindowManagerImpl.getInstance();
+               wm.setActiveMode(wm.getActiveMode(null));
            }
-       );
+
+           @Override
+           public void windowClosing(WindowEvent evt) {
+               LifecycleManager.getDefault().exit();
+           }
+       });
    }
 
    static void preInitMenuAndToolbar() {

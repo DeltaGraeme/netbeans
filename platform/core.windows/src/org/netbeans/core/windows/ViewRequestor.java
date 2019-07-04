@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import org.netbeans.core.windows.view.dnd.TopComponentDraggable;
+import org.netbeans.core.windows.view.ui.NbWindowComponent;
 import org.openide.windows.TopComponent;
 
 
@@ -81,8 +82,12 @@ class ViewRequestor {
         return view.getMainWindow();
     }
     
-    public Component getEditorAreaComponent() {
-        return view.getEditorAreaComponent();
+    public NbWindowComponent getNbWindowComponent(NbWindowImpl window) {
+        return view.getNbWindowComponent(window);
+    }
+    
+    public Component getEditorAreaComponent(NbWindowImpl window) {
+        return view.getEditorAreaComponent(window);
     }
     
     public String guessSlideSide(TopComponent tc) {

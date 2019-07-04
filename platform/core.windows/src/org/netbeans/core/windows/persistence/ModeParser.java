@@ -1064,6 +1064,8 @@ class ModeParser {
                     handleActiveTC(attrs);
                 } else if ("empty-behavior".equals(qname)) { // NOI18N
                     handleEmptyBehavior(attrs);
+                } else if ("nbwindow".equals(qname)) { // NOI18N
+                    handleNbWindowID(attrs);
                 }
             } else {
                 if (DEBUG) Debug.log(ModeParser.class, "-- ModeParser.startElement PARSING OLD");
@@ -1490,6 +1492,10 @@ class ModeParser {
             }
         }
         
+        private void handleNbWindowID (Attributes attrs) {
+            modeConfig.nbWindowID = attrs.getValue("id"); // NOI18N
+        }
+
         StringBuffer generateData(ModeConfig mc, InternalConfig ic) throws IOException {
             return fillBuffer(mc, ic);
         }
@@ -1553,6 +1559,8 @@ class ModeParser {
             appendFrame(mc, buff);
             appendActiveTC(mc, buff);
             appendEmptyBehavior(mc, buff);
+            appendNbWindow(mc, buff);
+
             
             buff.append("</mode>\n"); // NOI18N
             return buff;
@@ -1704,6 +1712,10 @@ class ModeParser {
         
         private void appendEmptyBehavior (ModeConfig mc, StringBuffer buff) {
             buff.append("    <empty-behavior permanent=\"").append(mc.permanent).append("\"/>\n"); // NOI18N
+        }
+
+        private void appendNbWindow(ModeConfig mc, StringBuffer buff) {
+            buff.append("    <nbwindow id=\"").append(mc.nbWindowID).append("\"/>\n"); // NOI18N
         }
     }
     

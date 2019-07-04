@@ -420,14 +420,14 @@ public final class ModeImpl implements Mode.Xml {
         return getCentral().getModeKind(this);
     }
     /** Gets side, either null for view and editor kinds, a side constant for sliding kind.. */
-    public String getSide() {
-        return getCentral().getModeSide(this);
+    public String getSide(NbWindowImpl window) {
+        return getCentral().getModeSide(getCentral().getWindowForMode(this), this);
     }
     
     // Contstraints and split weights are saved in split structure at wm model level.
     /** Sets constraints for mode. */
     public void setConstraints(SplitConstraint[] constraints) {
-        WindowManagerImpl.getInstance().setModeConstraints(this, constraints);
+        WindowManagerImpl.getInstance().setModeConstraints(WindowManagerImpl.getInstance().getWindowForMode(this), this, constraints);
     }
 
     /** @return Current constraints of this mode, null by default */

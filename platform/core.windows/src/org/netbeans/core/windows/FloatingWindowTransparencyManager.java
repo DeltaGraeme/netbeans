@@ -22,6 +22,7 @@ package org.netbeans.core.windows;
 import java.awt.Window;
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.swing.SwingUtilities;
 import org.netbeans.core.windows.nativeaccess.NativeWindowSystem;
@@ -109,10 +110,10 @@ public class FloatingWindowTransparencyManager {
                 final WindowManagerImpl wm = WindowManagerImpl.getInstance();
                 //turn off transparency for active floating window
                 ModeImpl currentActiveMode = (ModeImpl)wm.findMode( currentActive );
-                if( null != currentActiveMode 
+                NbWindowImpl window = WindowManagerImpl.getInstance().getWindowForMode(currentActiveMode);                
+                if( (null != currentActiveMode 
                         && currentActiveMode.getState() == Constants.MODE_STATE_SEPARATED
-                        && currentActiveMode.getKind() != Constants.MODE_KIND_EDITOR) {
-
+                        && currentActiveMode.getKind() != Constants.MODE_KIND_EDITOR) || (Boolean.getBoolean("netbeans.winsys.enhanced") && window != null)) {
                     Window w = SwingUtilities.windowForComponent(currentActive);
                     if( null != w ) {
                         NativeWindowSystem.getDefault().setWindowAlpha( w, 1.0f );
@@ -145,8 +146,13 @@ public class FloatingWindowTransparencyManager {
     private void turnTransparencyOff() {
         NativeWindowSystem nws = NativeWindowSystem.getDefault();
         for( ModeImpl m : WindowManagerImpl.getInstance().getModes() ) {
-            if( m.getState() != Constants.MODE_STATE_SEPARATED
-                    || m.getKind() == Constants.MODE_KIND_EDITOR )
+            // don't make main window transparent
+            NbWindowImpl win = WindowManagerImpl.getInstance().getWindowForMode(m);
+            if(win == null || !isValidTransparentWindow(win))
+                continue;
+            
+            if( (m.getState() != Constants.MODE_STATE_SEPARATED
+                    || m.getKind() == Constants.MODE_KIND_EDITOR) && (!Boolean.getBoolean("netbeans.winsys.enhanced")) )
                 continue;
             TopComponent tc = m.getSelectedTopComponent();
             if( null != tc ) {
@@ -162,9 +168,13 @@ public class FloatingWindowTransparencyManager {
         float alpha = WinSysPrefs.HANDLER.getFloat(WinSysPrefs.TRANSPARENCY_FLOATING_ALPHA, 0.5f);
         NativeWindowSystem nws = NativeWindowSystem.getDefault();
         for( ModeImpl m : WindowManagerImpl.getInstance().getModes() ) {
-            if( m.getState() != Constants.MODE_STATE_SEPARATED 
+            // don't make main window transparent
+            NbWindowImpl win = WindowManagerImpl.getInstance().getWindowForMode(m);
+            if(win == null || m.equals(activeMode) || !isValidTransparentWindow(win))
+                continue;
+            if( (m.getState() != Constants.MODE_STATE_SEPARATED 
                     || m.equals( activeMode )
-                    || m.getKind() == Constants.MODE_KIND_EDITOR )
+                    || m.getKind() == Constants.MODE_KIND_EDITOR) && (!Boolean.getBoolean("netbeans.winsys.enhanced")) )
                 continue;
             TopComponent tc = m.getSelectedTopComponent();
             if( null != tc ) {
@@ -174,6 +184,21 @@ public class FloatingWindowTransparencyManager {
                 }
             }
         }
-
+    }
+    // a floating window can be transparent if it contains no editors
+    private boolean isValidTransparentWindow(NbWindowImpl window) {
+        WindowManagerImpl wm = WindowManagerImpl.getInstance();
+        Set<ModeImpl> modes = wm.getCentral().getModesForWindow(window);
+        boolean isValid = true;
+        for(ModeImpl m: modes) {
+            TopComponent[] open = wm.getOpenedTopComponents(m);
+            for(TopComponent tc: open) {
+                if(TopComponentTracker.getDefault().isEditorTopComponent(tc)) {
+                    isValid = false;
+                    break;
+                }
+            }
+        }
+        return isValid;
     }
 }
